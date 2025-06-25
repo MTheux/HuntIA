@@ -1,9 +1,5 @@
 # HuntIA - Sua Plataforma de Pentest Inteligente
 
-![HuntIA Logo](https://raw.githubusercontent.com/SeuUsuario/SeuRepositorio/main/caminho/para/huntia_logo.png)
-*(Substitua a URL da imagem pelo caminho real do seu logo no repositório)*
-*(Se você tem o `huntbox_logo.png` na raiz do seu projeto local, pode ser `huntbox_logo.png`)*
-
 ## Visão Geral do Projeto
 
 HuntIA é uma suíte de ferramentas inteligentes para testes de segurança (pentest), desenvolvida para automatizar e aprimorar diversas fases do processo de avaliação de vulnerabilidades. Utilizando o poder do Large Language Model (LLM) do Google Gemini, o HuntIA transforma a análise de segurança, a geração de relatórios e a orquestração de testes em tarefas mais eficientes e precisas.
