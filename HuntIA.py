@@ -17,8 +17,8 @@ import re
 import pandas as pd
 import logging
 import shlex
-import zipfile # NOVO: Para lidar com arquivos ZIP
-import tempfile # NOVO: Para criar diretórios temporários
+import zipfile 
+import tempfile 
 from streamlit_option_menu import option_menu
 
 
@@ -277,23 +277,24 @@ def parse_vulnerability_summary(text_response):
 
     for i, line in enumerate(lines):
         # Esta é a linha que procura pela linha de resumo.
-        # Ela está correta em procurar a linha, o problema é o parsing dos valores.
-        if ("Total de Vulnerabilidades:" in line or "Total de Ameaças:" in line or "Total de Vulnerabilidades API:" in line or "Total de Insights:" in line or "Total de Eventos:" in line or "Total de Achados:" in line or "Total de Achados de Validação:" in line or "Total de Achados Mobile:" in line) and not summary_line_found: # Adicione "Total de Achados Mobile:"
+        # Adicione "Total de Achados Mobile:" para garantir que o parser encontre a linha no caso mobile.
+        if ("Total de Vulnerabilidades:" in line or "Total de Ameaças:" in line or \
+            "Total de Vulnerabilidades API:" in line or "Total de Insights:" in line or \
+            "Total de Eventos:" in line or "Total de Achados:" in line or \
+            "Total de Achados de Validação:" in line or "Total de Achados Mobile:" in line or \
+            "Total Achados:" in line) and not summary_line_found: # Adicione "Total Achados:" para o caso específico da imagem
             summary_line = line
             summary_line_found = True
         else:
             parsed_content.append(line)
 
     if summary_line_found:
-        # Tentar extrair os números usando regex mais flexível ou por posição.
-        # O LLM promete o formato: `Total de Achados: X | Críticos: Y | Altos: Z | Médios: W | Baixos: V`
-        # Vamos usar regex para capturar esses números.
-
-        total_match = re.search(r'Total(?: de Achados| de Vulnerabilidades| de Ameaças| de Insights| de Eventos| de Achados de Validação| Mobile):\s*(\d+)', summary_line)
-        crit_match = re.search(r'Críticas:\s*(\d+)', summary_line)
-        altas_match = re.search(r'Altas:\s*(\d+)', summary_line)
-        medias_match = re.search(r'Médios?:\s*(\d+)', summary_line) # Médios ou Médias
-        baixas_match = re.search(r'Baixas:\s*(\d+)', summary_line)
+        # Usar regexes mais flexíveis para capturar os números após os rótulos
+        total_match = re.search(r'Total(?: de Achados| de Vulnerabilidades| de Ameaças| de Insights| de Eventos| de Achados de Validação| Mobile)?:\s*(\d+)', summary_line)
+        crit_match = re.search(r'Críticas?:\s*(\d+)', summary_line) # Suporta Críticas: ou Críticos:
+        altas_match = re.search(r'Altas?:\s*(\d+)', summary_line) # Suporta Altas: ou Altos:
+        medias_match = re.search(r'Médios?:\s*(\d+)', summary_line) # Suporta Médias: ou Médios:
+        baixas_match = re.search(r'Baixas?:\s*(\d+)', summary_line) # Suporta Baixas: ou Baixos:
 
         if total_match:
             summary["Total"] = int(total_match.group(1))
@@ -713,38 +714,34 @@ def owasp_text_analysis_page(llm_model_vision, llm_model_text):
                     prompt_base = (
                         f"Você é um especialista em segurança da informação e pentest."
                         f"{global_context_prompt}" # INJETANDO CONTEXTO GLOBAL
-                        f"\n\nSua tarefa é fornecer informações detalhadas para a exploração da vulnerabilidade **'{specific_vulnerability_name}'**,"
+                        f"\n\nSua tarefa é fornecer informações detalhadas para a vulnerabilidade **'{specific_vulnerability_name}'**,"
                         f"que se enquadra na categoria da OWASP Top 10 (2021) como **'{OWASP_TOP_10_2021[categoria_owasp_codigo]}' ({categoria_owasp_codigo})**."
                         f"Considere o seguinte contexto adicional livre: '{st.session_state.owasp_text_context_input}'."
                         f"\n\nPor favor, inclua os seguintes tópicos de forma **concisa, técnica e prática**, utilizando formato Markdown para títulos e blocos de código:"
                         f"\n\n## 1. Detalhamento da Falha"
                         f"\nExplique a natureza da vulnerabilidade de forma clara e concisa: o que ela é, como surge e por que é um problema de segurança. Foque nos conceitos essenciais e no seu mecanismo, **especificamente para '{specific_vulnerability_name}'**.\n"
                         f"\n\n## 2. Cenário de Exemplo de Exploração"
-                        f"\nIlustre um cenário de ataque potencial que explora essa vulnerabilidade. Descreva as etapas passo a passo que um atacante poderia seguir para explorá-la, incluindo o ambiente típico e as condições necessárias para o sucesso do ataque, **aplicado a '{specific_vulnerability_name}'**.\n"
-                        f"\n\n## 3. Técnicas de Exploração"
-                        f"\nMétodos comuns e abordagens para testar e explorar esta vulnerabilidade em diferentes contextos, **específicas para '{specific_vulnerability_name}'**."
-                        f"\n\n## 4. Severidade e Impacto Técnico"
+                        f"\nIlustre um cenário de ataque potencial que explora essa vulnerabilidade. Descreva as etapas passo a passo que um atacante poderia seguir para explorá-la, incluindo o ambiente típico e as condições necessárias para o sucesso do ataque, **aplicado a '{specific_vulnerability_name}'**. Não inclua código aqui, apenas a lógica.\n" # AVISO: Não inclua código aqui
+                        f"\n\n## 3. Severidade e Impacto Técnico"
                         f"\nClassifique a severidade desta vulnerabilidade: [Crítica/Alta/Média/Baixa].\n"
                         f"**Impacto Técnico Detalhado:** Descreva as **consequências técnicas diretas e específicas** da exploração desta falha, indo além do genérico. Ex: 'A execução desta SQL Injection pode resultar em exfiltração completa do banco de dados de usuários, comprometimento do servidor web subjacente (se Shell via SQLMap), e bypass de autenticação.'\n"
                         f"**CVSSv3.1 Score:** Forneça uma estimativa do score CVSS v3.1 para esta vulnerabilidade e o vetor CVSS. Ex: `7.5 (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N)`\n"
                     )
 
                     if st.session_state.owasp_consider_waf_state:
-                        prompt_base += f"\n\n## 5. Dicas de Bypass de WAF"
+                        prompt_base += f"\n\n## 4. Dicas de Bypass de WAF"
                         prompt_base += f"\nForneça estratégias, técnicas e exemplos práticos (se aplicável à vulnerabilidade) para contornar ou evadir a detecção de um Web Application Firewall (WAF) ao tentar explorar esta falha. Inclua exemplos de payloads ou modificações de requisições que podem ajudar a testar o presença ou bypass do WAF."
-                        poc_section_num = 6
-                        solution_section_num = 7
-                        benefits_risks_section_num = 8
+                        solution_section_num = 5
+                        benefits_risks_section_num = 6
                     else:
-                        poc_section_num = 5
-                        solution_section_num = 6
-                        benefits_risks_section_num = 7
+                        solution_section_num = 4
+                        benefits_risks_section_num = 5
 
                     prompt_base += (
-                        f"\n\n## {poc_section_num}. Prova de Conceito (PoC)"
-                        f"\nForneça **exemplos práticos de comandos de terminal, requisições HTTP (com `curl` ou similar), ou payloads de código (Python, JS, etc.)** que demonstrem a exploração. Esses exemplos devem ser claros, prontos para uso (com pequenas adaptações) e encapsulados em blocos de código Markdown (` ``` `), **específicos para '{specific_vulnerability_name}'**."
                         f"\n\n## {solution_section_num}. Detalhamento da Solução"
-                        f"\nDescreva as **ações de correção concretas, detalhadas e com exemplos técnicos se possível**. Evite generalizações como 'melhorar segurança' ou 'validar inputs'. Seja específico. Ex: 'Para mitigar SQL Injection, implemente Prepared Statements ou ORM's seguros (com exemplo de código em Python/Java), use validação de input rigorosa (whitelist) no backend, e aplique o princípio do menor privilégio ao usuário do banco de dados.'\n"
+                        f"\nDescreva as **ações de correção concretas, detalhadas e com exemplos técnicos se possível**. Evite generalizações."
+                        f"**Se o 'Contexto Adicional Livre' contém detalhes de exploração ou trechos de código, baseie suas dicas de solução diretamente nesse código ou nos princípios de exploração descritos, oferecendo correções coesas e precisas para aquele cenário específico.**"
+                        f"Seja específico. Ex: 'Para mitigar SQL Injection, implemente Prepared Statements ou ORM's seguros (com exemplo de código em Python/Java), use validação de input rigorosa (whitelist) no backend, e aplique o princípio do menor privilégio ao usuário do banco de dados.'\n"
                         f"\n\n## {benefits_risks_section_num}. Benefícios e Riscos da Correção"
                         f"\nQuais são os benefícios de implementar a solução e os possíveis riscos ou impactos colaterais da sua aplicação?"
                         f"\n\nSeu objetivo é ser direto, útil e focado em ações e informações completas para um pentester, como um resumo para um relatório de pentest."
@@ -778,195 +775,200 @@ def owasp_text_analysis_page(llm_model_vision, llm_model_text):
 def http_request_analysis_page(llm_model_vision, llm_model_text):
     st.header("Deep HTTP Insight 📡")
     st.markdown("""
-        Selecione o tipo de conteúdo para análise. Você pode colar:
-        - **Requisição HTTP RAW:** Analisa requisições HTTP completas em busca de falhas OWASP.
-        - **Headers de Resposta HTTP:** Analisa cabeçalhos de resposta para misconfigurations e exposição de informações.
-        - **Configuração de Servidor:** Analisa trechos de configuração de servidores (Apache, Nginx, IIS) para hardening.
+    Selecione o tipo de conteúdo para análise. Você pode colar:
+    - **Requisição HTTP RAW:** Analisa requisições HTTP completas em busca de falhas OWASP.
+    - **Headers de Resposta HTTP:** Analisa cabeçalhos de resposta para misconfigurations e exposição de informações.
+    - **Configuração de Servidor:** Analisa trechos de configuração de servidores (Apache, Nginx, IIS) para hardening.
     """)
-    logging.info("Página Deep HTTP Insight acessada.")
 
-    # Initialize session state variables for this page
+    # Inicializar variáveis de sessão
     if 'http_analysis_type' not in st.session_state:
         st.session_state.http_analysis_type = "Requisição HTTP RAW"
     if 'http_request_input_url' not in st.session_state:
         st.session_state.http_request_input_url = ""
-    if 'http_analysis_content' not in st.session_state: # Conteúdo geral para análise
+    if 'http_analysis_content' not in st.session_state:
         st.session_state.http_analysis_content = ""
     if 'http_analysis_result' not in st.session_state:
         st.session_state.http_analysis_result = ""
-    if 'http_consider_waf_state' not in st.session_state:
-        st.session_state.http_consider_waf_state = False
     if 'http_analysis_summary' not in st.session_state:
         st.session_state.http_analysis_summary = None
+    if 'http_context_free_input' not in st.session_state:
+        st.session_state.http_context_free_input = ""
 
+    logging.info("Página Deep HTTP Insight acessada.")
+
+    # Resetar campos se necessário
     def reset_http_analysis():
         st.session_state.http_analysis_type = "Requisição HTTP RAW"
         st.session_state.http_request_input_url = ""
         st.session_state.http_analysis_content = ""
         st.session_state.http_analysis_result = ""
-        st.session_state.http_consider_waf_state = False
         st.session_state.http_analysis_summary = None
+        st.session_state.http_context_free_input = ""
         logging.info("Deep HTTP Insight: Reset de campos.")
         st.rerun()
 
+    # Botão para limpar e fazer nova consulta
     if st.button("Limpar e Fazer Nova Consulta", key="reset_http_analysis_button"):
         reset_http_analysis()
 
-    analysis_type_options = ["Requisição HTTP RAW", "Headers de Resposta HTTP", "Configuração de Servidor (Apache/Nginx/IIS)"]
+    # Selecionar tipo de análise
+    analysis_type_options = [
+        "Requisição HTTP RAW",
+        "Headers de Resposta HTTP",
+        "Configuração de Servidor (Apache/Nginx/IIS)"
+    ]
     st.session_state.http_analysis_type = st.radio(
         "Tipo de Análise:",
         options=analysis_type_options,
         key="http_analysis_type_radio"
     )
 
+    # URL alvo (apenas para Requisição HTTP RAW)
     if st.session_state.http_analysis_type == "Requisição HTTP RAW":
-        target_url_placeholder = "Ex: https://testphp.vulnweb.com/search.php"
-        content_placeholder = "Ex: POST /search.php?... HTTP/1.1\nHost: ...\nContent-Length: ..."
         st.session_state.http_request_input_url = st.text_input(
             "URL Alvo (Target):",
             value=st.session_state.http_request_input_url,
-            placeholder=target_url_placeholder,
-            key="http_request_target_url_input"
+            placeholder="Exemplo: https://example.com/path "
         )
-        st.session_state.http_analysis_content = st.text_area(
-            "Cole a requisição HTTP RAW aqui:",
-            value=st.session_state.http_analysis_content,
-            placeholder=content_placeholder,
-            height=300,
-            key="http_raw_input_area"
-        )
-        st.session_state.http_consider_waf_state = st.checkbox(
-            "Considerar bypass de WAF?",
-            value=st.session_state.http_consider_waf_state,
-            key="http_waf_checkbox"
-        )
-    else: # Headers de Resposta ou Configuração de Servidor
-        content_placeholder_headers = "Ex: HTTP/1.1 200 OK\nContent-Type: text/html\nServer: Apache/2.4.41 (Ubuntu)\nX-Powered-By: PHP/7.4.3\nStrict-Transport-Security: max-age=31536000; includeSubDomains\n..."
-        content_placeholder_config = "Ex: Para Apache:\n<Directory /var/www/html>\n  Options Indexes FollowSymLinks\n  AllowOverride None\n  Require all granted\n</Directory>\n\nPara Nginx:\nlocation / {\n  deny all;\n  return 403;\n}\n\nPara IIS:\n<configuration>\n  <system.webServer>\n    <security>\n      <requestFiltering>\n        <denyUrlSequences>\n          <add sequence='..'/>\n        </denyUrlSequences>\n      </requestFiltering>\n    </security>\n  </system.webServer>\n</configuration>"
-
-        st.session_state.http_analysis_content = st.text_area(
-            f"Cole o conteúdo para análise aqui ({st.session_state.http_analysis_type}):",
-            value=st.session_state.http_analysis_content,
-            placeholder=content_placeholder_headers if st.session_state.http_analysis_type == "Headers de Resposta HTTP" else content_placeholder_config,
-            height=300,
-            key="http_config_input_area"
-        )
-        st.session_state.http_request_input_url = "" # Limpar URL alvo para outros tipos de análise
-        st.session_state.http_consider_waf_state = False # WAF bypass não se aplica diretamente aqui
-
-
-    if st.button("Analisar Conteúdo", key="analyze_http_content_button"):
-        if not st.session_state.http_analysis_content:
-            st.error("Por favor, cole o conteúdo para análise.")
-            logging.warning("Deep HTTP Insight: Análise abortada, conteúdo vazio.") # LOG com novo nome
+        if not st.session_state.http_request_input_url:
+            st.error("Por favor, forneça a URL Alvo para a Requisição HTTP RAW.")
+            logging.warning("Deep HTTP Insight: Análise de Requisições HTTP abortada, URL Alvo vazia.")
             return
 
-        # Validação específica para Requisição HTTP RAW
-        if st.session_state.http_analysis_type == "Requisição HTTP RAW":
-            if not st.session_state.http_request_input_url:
-                st.error("Por favor, forneça a URL Alvo para a Requisição HTTP RAW.")
-                logging.warning("Deep HTTP Insight: Análise de Requisições HTTP abortada, URL Alvo vazia.") # LOG com novo nome
-                return
-            if not is_valid_url(st.session_state.http_request_input_url):
-                st.error("A URL Alvo fornecida não é um formato válido. Ex: https://example.com/path")
-                logging.warning(f"Deep HTTP Insight: Análise de Requisições HTTP abortada, URL inválida '{st.session_state.http_request_input_url}'.") # LOG com novo nome
-                return
+    # Conteúdo para análise
+    content_placeholder = (
+        "- Para **Requisição HTTP RAW**: Cole aqui a requisição completa.\n"
+        "- Para **Headers de Resposta HTTP**: Cole apenas os headers.\n"
+        "- Para **Configuração de Servidor**: Cole o trecho de configuração."
+    )
+    st.session_state.http_analysis_content = st.text_area(
+        f"Cole o conteúdo para análise aqui ({st.session_state.http_analysis_type}):",
+        value=st.session_state.http_analysis_content,
+        placeholder=content_placeholder,
+        height=300,
+        key="http_config_input_area"
+    )
+    if not st.session_state.http_analysis_content.strip():
+        st.error("Por favor, cole o conteúdo para análise.")
+        logging.warning("Deep HTTP Insight: Análise abortada, conteúdo vazio.")
+        return
 
+    # Contexto adicional livre
+    st.session_state.http_context_free_input = st.text_area(
+        "Contexto Adicional Livre (opcional, para detalhes de exploração ou trechos de código):",
+        value=st.session_state.http_context_free_input,
+        placeholder=(
+            "Ex: 'A exploração foi feita injetando `'; OR 1=1--` no parâmetro `id` da URL.', "
+            "'Trecho de código: `user_id = request.args.get('id')`'"
+        ),
+        height=100,
+        key="http_context_free_input_area"
+    )
+
+    # Botão para analisar
+    if st.button("Analisar Conteúdo", key="analyze_http_content_button"):
         with st.spinner(f"Analisando {st.session_state.http_analysis_type} com LLM..."):
-            logging.info(f"Deep HTTP Insight: Iniciando análise do tipo '{st.session_state.http_analysis_type}'.") # LOG com novo nome
-            
-            prompt_content = st.session_state.http_analysis_content
-            
-            # --- INJETANDO O CONTEXTO GLOBAL ---
+            # Preparar o prompt baseado no tipo de análise
             global_context_prompt = get_global_context_prompt()
-            # --- FIM INJEÇÃO DE CONTEXTO ---
+            escaped_http_context_free_input = st.session_state.http_context_free_input.replace('{', '{{').replace('}', '}}')
 
-            # Ajustar o prompt e o 'code_lang' com base no tipo de análise selecionado
             if st.session_state.http_analysis_type == "Requisição HTTP RAW":
-                prompt_intro = (
-                    f"Você é um especialista em segurança da informação e pentest."
-                    f"{global_context_prompt}" # INJETANDO CONTEXTO GLOBAL
-                    f"\n\nAnalise a requisição HTTP RAW fornecida e a URL alvo '{st.session_state.http_request_input_url}'. Identifique **TODAS as possíveis falhas de segurança OWASP Top 10 (2021) e outras vulnerabilidades relevantes aplicáveis**, sendo extremamente detalhado e preciso na análise de cada parte da requisição. Inclua:\n"
+                prompt_intro_context = (
+                    "Você é um especialista em segurança da informação e pentest." +
+                    global_context_prompt +
+                    f"Analise a requisição HTTP RAW fornecida e a URL alvo '{st.session_state.http_request_input_url}'. Identifique **TODAS as possíveis falhas de segurança OWASP Top 10 (2021) e outras vulnerabilidades relevantes aplicáveis**, sendo extremamente detalhado e preciso na análise de cada parte da requisição. "
                 )
                 code_lang = "http"
-                # Adicionar detalhes de parseamento para ajudar o LLM
-                parsed_req = parse_raw_http_request(prompt_content)
+
+                # Parsear a requisição HTTP RAW
+                parsed_req = parse_raw_http_request(st.session_state.http_analysis_content)
                 prompt_content_for_llm = (
                     f"URL Alvo: {st.session_state.http_request_input_url}\n"
                     f"Método: {parsed_req['method']}\n"
                     f"Caminho: {parsed_req['path']}\n"
-                    f"Headers:\n{json.dumps(parsed_req['headers'], indent=2)}\n" # Usar json.dumps para formatar headers
-                    f"Corpo:\n{parsed_req['body']}\n\n"
-                    f"Requisição RAW Original:\n{prompt_content}"
+                    f"Headers:\n{json.dumps(parsed_req['headers'], indent=2).replace('{', '{{').replace('}', '}}')}\n"
+                    f"Corpo:\n{parsed_req['body'].replace('{', '{{').replace('}', '}}')}\n"
+                    f"Requisição RAW Original:\n{st.session_state.http_analysis_content.replace('{', '{{').replace('}', '}}')}"
                 )
+
             elif st.session_state.http_analysis_type == "Headers de Resposta HTTP":
-                prompt_intro = (
-                    f"Você é um especialista em segurança web e análise de headers HTTP."
-                    f"{global_context_prompt}" # INJETANDO CONTEXTO GLOBAL
-                    f"\n\nAnalise os seguintes headers de resposta HTTP. Identifique misconfigurations de segurança, exposição de informações sensíveis e a falta de headers de segurança importantes. Sugira melhorias."
+                prompt_intro_context = (
+                    "Você é um especialista em segurança web e análise de headers HTTP." +
+                    global_context_prompt +
+                    "Analise os seguintes headers de resposta HTTP. Identifique misconfigurations de segurança, exposição de informações sensíveis e a falta de headers de segurança importantes. Priorize a descrição do achado e o exemplo de impacto."
                 )
                 code_lang = "http"
-                prompt_content_for_llm = prompt_content # Conteúdo é o header diretamente
+                prompt_content_for_llm = st.session_state.http_analysis_content.replace('{', '{{').replace('}', '}}')
+
             elif st.session_state.http_analysis_type == "Configuração de Servidor (Apache/Nginx/IIS)":
-                prompt_intro = (
-                    f"Você é um especialista em hardening de servidores web (Apache, Nginx, IIS) e pentest."
-                    f"{global_context_prompt}" # INJETANDO CONTEXTO GLOBAL
-                    f"\n\nAnalise o seguinte trecho de configuração de servidor. Identifique misconfigurations de segurança (OWASP A05), diretórios expostos, e outras vulnerabilidades. Sugira melhorias de hardening. "
-                    f"Tente inferir o tipo de servidor (Apache, Nginx, IIS) pelo formato da configuração."
+                prompt_intro_context = (
+                    "Você é um especialista em hardening de servidores web (Apache, Nginx, IIS) e pentest." +
+                    global_context_prompt +
+                    "\n\nAnalise o seguinte trecho de configuração de servidor. Identifique misconfigurations de segurança (OWASP A05), diretórios expostos, e outras vulnerabilidades. Priorize a descrição do achado e o exemplo de impacto."
                 )
-                # Tenta adivinhar a linguagem do código para formatação no prompt do LLM
-                if "Options" in prompt_content or "<Directory" in prompt_content:
-                    code_lang = "apache"
-                elif "location /" in prompt_content or "server {" in prompt_content:
-                    code_lang = "nginx"
-                elif "<configuration>" in prompt_content or "<system.webServer>" in prompt_content:
-                    code_lang = "xml" # IIS web.config é XML
-                else:
-                    code_lang = "plaintext"
-                prompt_content_for_llm = prompt_content
+                code_lang = "plaintext"
+                prompt_content_for_llm = st.session_state.http_analysis_content.replace('{', '{{').replace('}', '}}')
 
-
+            # Montar o prompt completo
             full_prompt = (
-                f"{prompt_intro}"
-                f"\n\n**RESUMO:** Forneça um resumo quantitativo na PRIMEIRA LINHA da sua resposta, no formato exato: `Total de Achados: X | Críticos: Y | Altos: Z | Médios: W | Baixas: V` (substitua X,Y,Z,W,V pelos números correspondentes). Se não houver achados, use 0.\n\n"
+                prompt_intro_context +
+                f"\n\n**RESUMO:** Forneça um resumo quantitativo na PRIMEIRA LINHA da sua resposta, no formato exato: `Total de Achados: X | Críticos: Y | Altos: Z | Médios: W | Baixos: V` (substitua X,Y,Z,W,V pelos números correspondentes). Se não houver achados, use 0.\n\n"
                 f"**Conteúdo para análise:**\n"
                 f"```{code_lang}\n{prompt_content_for_llm}\n```\n\n"
-                f"Para cada **achado de segurança (vulnerabilidade ou misconfiguration)** identificado, apresente de forma concisa e prática, utilizando formato Markdown:\n\n"
-                f"## [Tipo de Achado] (Ex: Header de Segurança Ausente, Versão do Servidor Exposta, Diretório com Listagem Ativada)\n"
-                f"**Categoria OWASP (se aplicável):** [Ex: A05: Security Misconfiguration, A02: Cryptographic Failures]. Se não OWASP, indique 'Exposição de Informação' ou 'Melhoria de Hardening'.\n"
+                f"Para cada **achado de segurança (vulnerabilidade ou misconfiguration)** identificado, apresente os seguintes tópicos de forma separada e concisa, utilizando Markdown. **Comece cada achado com um cabeçalho `###`:**\n\n"
+                f"### [Tipo de Achado] (Ex: Header de Segurança Ausente, Versão do Servidor Exposta)\n"
+                f"**Categoria OWASP (se aplicável):** [Ex: A05: Security Misconfiguration]. Se não OWASP, indique 'Exposição de Informação' ou 'Melhoria de Hardening'.\n"
                 f"**Severidade/Risco:** [Crítica/Alta/Média/Baixa/Informativo - explique o impacto deste achado específico]\n"
-                f"**Detalhes no Conteúdo:** Explique onde no conteúdo fornecido a falha foi observada. Cite o trecho relevante.\n"
-                f"**Exemplo de Cenário de Impacto/PoC (se aplicável):** Descreva o risco e como um atacante poderia se beneficiar desta configuração. Forneça um comando simples ou explicação de como testar, se direto.\n"
-                f"**Recomendação/Mitigação:** Ações concretas e específicas para corrigir o problema ou melhorar o hardening. Inclua exemplos de código/configuração se aplicável (ex: como adicionar um header X-Content-Type-Options, como desabilitar listagem de diretórios).\n\n"
-                f"Se o tipo de análise for 'Requisição HTTP RAW' e `http_consider_waf_state` for verdadeiro, inclua também uma seção sobre bypass de WAF, se aplicável à vulnerabilidade encontrada."
+                f"**Detalhes no Conteúdo:** Explique onde no conteúdo fornecido a falha foi observada. Cite o trecho relevante da requisição/configuração. Seja preciso na correlação.\n"
+                f"**Exemplo de Exploração:** Descreva o risco e como um atacante poderia se beneficiar desta configuração/vulnerabilidade. Forneça um comando simples, um payload ou uma explicação de como testar/explorar. **Se o 'Contexto Adicional Livre' (fornecido pelo usuário) contém detalhes de um PoC ou trechos de código de exploração, baseie seu exemplo diretamente nele, incluindo o código/comando relevante em um bloco de código Markdown (` ```{code_lang} ` ou ` ```bash ` ou ` ```http `).** Se o contexto livre for irrelevante ou não tiver PoC, forneça um exemplo genérico e aplicável. Não se preocupe com \"Recomendação/Mitigação\" ou \"Ferramentas Sugeridas\" separadamente.\n"
+                f"--- (Fim do Achado) ---"  # Separador para o próximo achado
             )
 
-            # Adicionar a seção de WAF se aplicável e for Requisição HTTP RAW
-            if st.session_state.http_analysis_type == "Requisição HTTP RAW" and st.session_state.http_consider_waf_state:
-                 full_prompt += f"\n\n## Dicas de Bypass de WAF (para Requisição HTTP RAW)\nForneça estratégias, técnicas e exemplos práticos para contornar ou evadir a detecção de um Web Application Firewall (WAF) ao tentar explorar as falhas identificadas. Inclua exemplos de payloads ou modificações de requisições que podem ajudar a testar o presença ou bypass do WAF."
-
-
-            analysis_raw = obter_resposta_llm(llm_model_text, [full_prompt])
-
-            if analysis_raw:
-                st.session_state.http_analysis_summary, st.session_state.http_analysis_result = parse_vulnerability_summary(analysis_raw)
+            # Obter resposta do LLM
+            analysis_result = obter_resposta_llm(llm_model_text, [full_prompt])
+            if analysis_result:
+                st.session_state.http_analysis_result = analysis_result
                 logging.info("Deep HTTP Insight: Análise concluída com sucesso.")
             else:
-                st.session_state.http_analysis_result = "Não foi possível analisar o conteúdo. Tente novamente."
-                st.session_state.http_analysis_summary = None
-                logging.error("Deep HTTP Insight: Falha na obtenção da análise do LLM.")
+                st.session_state.http_analysis_result = "Não foi possível obter uma resposta do LLM. Tente novamente."
+                logging.error("Deep HTTP Insight: Falha na obtenção da resposta do LLM.")
 
+            # Parsear o resumo
+            if st.session_state.http_analysis_result:
+                summary_match = re.search(
+                    r'Total de Achados:\s*(\d+)\s*\|\s*Críticos:\s*(\d+)\s*\|\s*Altos:\s*(\d+)\s*\|\s*Médios:\s*(\d+)\s*\|\s*Baixos:\s*(\d+)',
+                    st.session_state.http_analysis_result
+                )
+                if summary_match:
+                    total, criticos, altos, medios, baixos = map(int, summary_match.groups())
+                    st.session_state.http_analysis_summary = {
+                        "Total": total,
+                        "Críticas": criticos,
+                        "Altas": altos,
+                        "Médios": medios,
+                        "Baixos": baixos
+                    }
+                else:
+                    st.session_state.http_analysis_summary = {"Total": 0, "Críticas": 0, "Altas": 0, "Médios": 0, "Baixos": 0}
+                    logging.warning("Deep HTTP Insight: Resumo de vulnerabilidades não encontrado na resposta do LLM.")
+
+    # Exibir resultados
     if st.session_state.http_analysis_result:
         st.subheader("Resultados da Análise de Segurança")
+
+        # Exibir métricas
         if st.session_state.http_analysis_summary:
             cols = st.columns(5)
-            cols[0].metric("Total Achados", st.session_state.http_analysis_summary.get("Total", 0))
+            cols[0].metric("Total", st.session_state.http_analysis_summary.get("Total", 0))
             cols[1].metric("Críticos", st.session_state.http_analysis_summary.get("Críticas", 0))
             cols[2].metric("Altos", st.session_state.http_analysis_summary.get("Altas", 0))
             cols[3].metric("Médios", st.session_state.http_analysis_summary.get("Médios", 0))
             cols[4].metric("Baixos", st.session_state.http_analysis_summary.get("Baixos", 0))
-            st.markdown("---")
+
+        # Exibir detalhes das vulnerabilidades
         st.markdown(st.session_state.http_analysis_result)
+
         # Feedback Buttons
         cols_feedback = st.columns(2)
         if cols_feedback[0].button("👍 Útil", key="http_analysis_feedback_good"):
@@ -976,6 +978,7 @@ def http_request_analysis_page(llm_model_vision, llm_model_text):
             st.toast("Obrigado pelo seu feedback. Continuaremos trabalhando para aprimorar.", icon="😔")
             logging.info("Feedback Deep HTTP Insight: Precisa de Melhoria.")
 
+    logging.info("Página Deep HTTP Insight finalizada.")
 
 def pentest_lab_page(llm_model_vision, llm_model_text):
     st.header("Pentest Lab: Seu Laboratório de Vulnerabilidades 🧪")
@@ -1441,18 +1444,18 @@ def static_code_analyzer_page(llm_model_vision, llm_model_text):
 def swagger_openapi_analyzer_page(llm_model_vision, llm_model_text):
     st.header("OpenAPI Analyzer: Análise de APIs (Swagger/OpenAPI) 📄")
     st.markdown("""
-        Cole o conteúdo de um arquivo OpenAPI (JSON ou YAML) para analisar a especificação da API em busca de:
-        - **Vulnerabilidades OWASP API Security Top 10 (2023)**
-        - Falhas de design e implementação
-        - Exposição de informações sensíveis
-        - Boas práticas de segurança e sugestões de melhoria.
+    Cole o conteúdo de um arquivo OpenAPI (JSON ou YAML) para analisar a especificação da API em busca de:
+    - **Vulnerabilidades OWASP API Security Top 10 (2023)**
+    - Falhas de design e implementação
+    - Exposição de informações sensíveis
+    - Boas práticas de segurança e sugestões de melhoria
     """)
+
     logging.info("Página OpenAPI Analyzer acessada.")
 
+    # Inicializar variáveis de sessão
     if 'swagger_input_content' not in st.session_state:
         st.session_state.swagger_input_content = ""
-    if 'swagger_analysis_result' not in st.session_state:
-        st.session_state.swagger_analysis_result = []
     if 'swagger_analysis_result_display' not in st.session_state:
         st.session_state.swagger_analysis_result_display = ""
     if 'swagger_context_input' not in st.session_state:
@@ -1462,7 +1465,6 @@ def swagger_openapi_analyzer_page(llm_model_vision, llm_model_text):
 
     def reset_swagger_analyzer():
         st.session_state.swagger_input_content = ""
-        st.session_state.swagger_analysis_result = []
         st.session_state.swagger_analysis_result_display = ""
         st.session_state.swagger_context_input = ""
         st.session_state.swagger_summary = None
@@ -1472,93 +1474,110 @@ def swagger_openapi_analyzer_page(llm_model_vision, llm_model_text):
     if st.button("Limpar Análise OpenAPI", key="reset_swagger_analysis_button"):
         reset_swagger_analyzer()
 
-    swagger_content = st.text_area(
+    # Entrada de conteúdo OpenAPI
+    st.session_state.swagger_input_content = st.text_area(
         "Cole o conteúdo do arquivo OpenAPI (JSON ou YAML) aqui:",
         value=st.session_state.swagger_input_content,
         placeholder="Ex: { 'openapi': '3.0.0', 'info': { ... }, 'paths': { ... } }",
         height=400,
         key="swagger_input_area"
     )
-    st.session_state.swagger_input_content = swagger_content.strip()
 
-    context_input = st.text_area(
-        "Contexto Adicional (opcional):", # Mantido para contexto livre da API
+    # Contexto adicional opcional
+    st.session_state.swagger_context_input = st.text_area(
+        "Contexto Adicional (opcional):",
         value=st.session_state.swagger_context_input,
         placeholder="Ex: 'Esta API é para gerenciamento de usuários', 'É uma API interna para microserviços'",
         height=150,
         key="swagger_context_input_area"
     )
-    st.session_state.swagger_context_input = context_input.strip()
-
 
     if st.button("Analisar OpenAPI", key="analyze_swagger_button"):
-        if not st.session_state.swagger_input_content:
+        if not st.session_state.swagger_input_content.strip():
             st.error("Por favor, cole o conteúdo OpenAPI/Swagger para análise.")
-            logging.warning("OpenAPI Analyzer: Análise abortada, conteúdo OpenAPI vazio.")
+            logging.warning("OpenAPI Analyzer: Análise abortada, conteúdo vazio.")
             return
-        else:
-            with st.spinner("Analisando especificação OpenAPI/Swagger..."):
-                logging.info("OpenAPI Analyzer: Iniciando análise de especificação.")
+
+        with st.spinner("Analisando especificação OpenAPI/Swagger..."):
+            logging.info("OpenAPI Analyzer: Iniciando análise de especificação.")
+
+            # Detectar formato do conteúdo
+            content_format = "TEXTO SIMPLES (formato inválido, análise pode ser limitada)"
+            code_lang = "plaintext"
+            try:
+                json.loads(st.session_state.swagger_input_content)
+                content_format = "JSON"
+                code_lang = "json"
+            except json.JSONDecodeError:
                 try:
-                    json.loads(st.session_state.swagger_input_content)
-                    content_format = "JSON"
-                    code_lang = "json"
-                except json.JSONDecodeError:
-                    try:
-                        yaml.safe_load(st.session_state.swagger_input_content)
-                        content_format = "YAML"
-                        code_lang = "yaml"
-                    except yaml.YAMLError:
-                        content_format = "TEXTO SIMPLES (formato inválido, análise pode ser limitada)"
-                        code_lang = "plaintext"
-                        st.warning("O conteúdo colado não parece ser um JSON ou YAML válido. A análise pode ser limitada.")
-                        logging.warning("OpenAPI Analyzer: Conteúdo não é JSON ou YAML válido.")
+                    yaml.safe_load(st.session_state.swagger_input_content)
+                    content_format = "YAML"
+                    code_lang = "yaml"
+                except yaml.YAMLError:
+                    st.warning("O conteúdo colado não parece ser um JSON ou YAML válido. A análise pode ser limitada.")
+                    logging.warning("OpenAPI Analyzer: Conteúdo não é JSON ou YAML válido.")
 
-                # --- INJETANDO O CONTEXTO GLOBAL ---
-                global_context_prompt = get_global_context_prompt()
-                # --- FIM INJEÇÃO DE CONTEXTO ---
+            # Prompt para o LLM
+            global_context_prompt = get_global_context_prompt()
+            swagger_prompt = (
+                f"Você é um especialista em segurança de APIs e pentest, com profundo conhecimento na OWASP API Security Top 10 (2023). "
+                f"{global_context_prompt} \n\n"
+                f"Sua tarefa é analisar a especificação OpenAPI (Swagger) fornecida ({content_format}) e o contexto adicional: '{st.session_state.swagger_context_input}', identificando **TODAS as possíveis vulnerabilidades de segurança e falhas de design**.\n\n"
+                f"Para cada vulnerabilidade/falha identificada, forneça os seguintes tópicos de forma separada e concisa, utilizando Markdown. **Comece cada achado com um cabeçalho `###`:**\n\n"
+                f"### [Nome da Vulnerabilidade/Falha de Design]\n"
+                f"**Categoria OWASP API Security Top 10 (2023):** [Ex: API1: Broken Object Level Authorization (BOLA), API8: Security Misconfiguration]. Se não se encaixa diretamente, use 'Falha de Design Geral'.\n"
+                f"**Severidade/Risco:** [Crítica/Alta/Média/Baixa - explique o impacto específico para esta API]\n"
+                f"**Localização na Especificação:** Indique o caminho exato ou uma descrição clara de onde a falha foi observada na especificação OpenAPI (ex: `/paths/{{userId}}/details GET`, `components/schemas/UserObject`).\n"
+                f"**Exemplo de Exploração:** Descreva como um atacante poderia explorar a vulnerabilidade. Forneça um comando simples, um payload ou uma explicação de como testar/explorar.\n"
+                f"**Recomendação/Mitigação:** Ações concretas e específicas para corrigir a vulnerabilidade ou melhorar o design da API, relevantes para a especificação OpenAPI fornecida.\n"
+                f"\n"
+                f"**Conteúdo da Especificação OpenAPI/Swagger (para sua referência):**\n"
+                f"```{code_lang}\n{st.session_state.swagger_input_content}\n```\n\n"
+                f"Se não encontrar vulnerabilidades óbvias, indique isso claramente e sugira melhorias gerais de segurança."
+            )
 
-                swagger_prompt = (
-                    f"Você é um especialista em segurança de APIs e pentest, com profundo conhecimento na OWASP API Security Top 10 (2023)."
-                    f"{global_context_prompt}" # INJETANDO CONTEXTO GLOBAL
-                    f"\n\nSua tarefa é analisar a especificação OpenAPI (Swagger) fornecida ({content_format}) e o contexto adicional: '{st.session_state.swagger_context_input}', identificando **TODAS as possíveis vulnerabilidades de segurança e falhas de design**."
-                    f"\n\n**RESUMO:** Forneça um resumo quantitativo na PRIMEIRA LINHA da sua resposta, no formato exato: `Total de Vulnerabilidades API: X | Críticas: Y | Altas: Z | Médios: W | Baixas: V` (substitua X,Y,Z,W,V pelos números correspondentes). Se não houver vulnerabilidades, use 0.\n\n"
-                    f"Para cada **vulnerabilidade ou falha de design** identificada, apresente de forma concisa e prática, utilizando formato Markdown para títulos e blocos de código:\n\n"
-                    f"## [Nome da Vulnerabilidade/Falha de Design]\n"
-                    f"**Categoria OWASP API Security Top 10 (2023):** [Ex: API1: Broken Object Level Authorization (BOLA), API8: Security Misconfiguration]. Se não se encaixar diretamente, use 'Falha de Design Geral'.\n"
-                    f"**Severidade/Risco:** [Crítica/Alta/Média/Baixa - explique o impacto específico para esta API]\n"
-                    f"**Localização na Especificação:** Indique o caminho exato ou uma descrição clara de onde a falha foi observada na especificação OpenAPI (ex: `/paths/{userId}/details GET`, `components/schemas/UserObject`).\n"
-                    f"**Detalhes e Explicação:** Explique brevemente a falha, como ela se manifesta nesta especificação e o impacto potencial.\n"
-                    f"**Exemplo de Cenário de Ataque/PoC (se aplicável):** Descreva um cenário de ataque que explore essa vulnerabilidade, ou um exemplo de requisição HTTP (com `curl` ou similar) que demonstre o problema. Encapsule em um bloco de código Markdown com linguagem `http` ou `bash` (` ```http `, ` ```bash `).\n"
-                    f"**Ferramentas Sugeridas:** Liste ferramentas que podem ser usadas para testar ou validar este achado (ex: Postman, Burp Suite, OWASP ZAP, Kiterunner, FFUF, OpenAPI-fuzzer, Dastardly, etc.).\n"
-                    f"**Recomendação/Mitigação:** Ações concretas e específicas para corrigir a vulnerabilidade ou melhorar o design da API, relevantes para a especificação OpenAPI fornecida (ex: adicionar autenticação/autorização, aplicar validação de esquema, limitar taxas).\n\n"
-                    f"**Conteúdo da Especificação OpenAPI/Swagger (para sua referência):\n"
-                    f"```" + code_lang + f"\n{st.session_state.swagger_input_content}\n```\n\n"
-                    f"Se não encontrar vulnerabilidades ou falhas de design óbvias, indique isso claramente e sugira melhorias gerais de segurança para a API.\n"
-                    f"Sua resposta deve ser direta, útil e focada em ações e informações completas para um pentester ou desenvolvedor."
+            # Obter resposta do LLM
+            analysis_raw = obter_resposta_llm(llm_model_text, [swagger_prompt])
+            if analysis_raw:
+                st.session_state.swagger_analysis_result_display = analysis_raw
+
+                # Extrair resumo
+                summary_match = re.search(
+                    r'Total de Vulnerabilidades API:\s*(\d+)\s*\|\s*Críticas:\s*(\d+)\s*\|\s*Altas:\s*(\d+)\s*\|\s*Médios:\s*(\d+)\s*\|\s*Baixos:\s*(\d+)',
+                    analysis_raw
                 )
-
-                analysis_raw = obter_resposta_llm(llm_model_text, [swagger_prompt])
-
-                if analysis_raw:
-                    st.session_state.swagger_summary, st.session_state.swagger_analysis_result_display = parse_vulnerability_summary(analysis_raw)
-                    logging.info("OpenAPI Analyzer: Análise concluída com sucesso.")
+                if summary_match:
+                    total, criticos, altos, medios, baixos = map(int, summary_match.groups())
+                    st.session_state.swagger_summary = {
+                        "Total": total,
+                        "Críticas": criticos,
+                        "Altas": altos,
+                        "Médios": medios,
+                        "Baixos": baixos
+                    }
                 else:
-                    st.session_state.swagger_analysis_result_display = "Não foi possível obter a análise da especificação OpenAPI. Tente novamente."
-                    st.session_state.swagger_summary = None
-                    logging.error("OpenAPI Analyzer: Falha na obtenção da análise do LLM.")
+                    st.session_state.swagger_summary = {"Total": 0, "Críticas": 0, "Altas": 0, "Médios": 0, "Baixos": 0}
+                    logging.warning("OpenAPI Analyzer: Resumo de vulnerabilidades não encontrado na resposta do LLM.")
+            else:
+                st.session_state.swagger_analysis_result_display = "Não foi possível obter a análise da especificação OpenAPI. Tente novamente."
+                st.session_state.swagger_summary = None
+                logging.error("OpenAPI Analyzer: Falha na obtenção da análise do LLM.")
 
+    # Exibir resultados
     if st.session_state.swagger_analysis_result_display:
         st.subheader("Resultados da Análise OpenAPI")
+
         if st.session_state.swagger_summary:
             cols = st.columns(5)
             cols[0].metric("Total", st.session_state.swagger_summary.get("Total", 0))
             cols[1].metric("Críticas", st.session_state.swagger_summary.get("Críticas", 0))
             cols[2].metric("Altas", st.session_state.swagger_summary.get("Altas", 0))
-            cols[3].metric("Médias", st.session_state.swagger_summary.get("Médias", 0))
-            cols[4].metric("Baixas", st.session_state.swagger_summary.get("Baixas", 0))
-            st.markdown("---")
+            cols[3].metric("Médios", st.session_state.swagger_summary.get("Médios", 0))
+            cols[4].metric("Baixos", st.session_state.swagger_summary.get("Baixos", 0))
+
+        # Exibir detalhes das vulnerabilidades
         st.markdown(st.session_state.swagger_analysis_result_display)
+
         # Feedback Buttons
         cols_feedback = st.columns(2)
         if cols_feedback[0].button("👍 Útil", key="swagger_feedback_good"):
@@ -1567,14 +1586,6 @@ def swagger_openapi_analyzer_page(llm_model_vision, llm_model_text):
         if cols_feedback[1].button("👎 Precisa de Melhoria", key="swagger_feedback_bad"):
             st.toast("Obrigado pelo seu feedback. Continuaremos trabalhando para aprimorar.", icon="😔")
             logging.info("Feedback OpenAPI Analyzer: Precisa de Melhoria.")
-
-EXPLOITDB_ROOT = os.path.join(os.path.dirname(__file__), "ExploitDB")
-EXPLOITS_DIR = os.path.join(EXPLOITDB_ROOT, "exploits")
-SHELLCODES_DIR = os.path.join(EXPLOITDB_ROOT, "shellcodes")
-os.makedirs(EXPLOITDB_ROOT, exist_ok=True)
-os.makedirs(EXPLOITS_DIR, exist_ok=True)
-os.makedirs(SHELLCODES_DIR, exist_ok=True)
-
 
 def searchsploit_exploit_page(llm_model_text):
     st.header("Search Exploit 🔍")
@@ -2295,7 +2306,7 @@ def pentest_narrative_generator_page(llm_model_vision, llm_model_text):
     st.header("Pentest Narrative Generator 📝")
     st.markdown("""
         Gere uma narrativa de relatório de pentest abrangente e profissional, combinando
-        detalhes do cliente/aplicação com suas evidências de teste (imagens e descrições).
+        detalhes do cliente/aplicação com suas evidências de teste, agora categorizadas por fase do pentest.
         O HuntIA irá integrar e expandir seus achados em um texto completo, incluindo uma conclusão e
         referências às imagens que você anexou.
     """)
@@ -2304,20 +2315,26 @@ def pentest_narrative_generator_page(llm_model_vision, llm_model_text):
     # Variáveis de sessão para esta página
     if 'narrative_client_name' not in st.session_state: st.session_state.narrative_client_name = ""
     if 'narrative_app_name' not in st.session_state: st.session_state.narrative_app_name = ""
-    # Evidências: agora com tipo de achado (vulnerabilidade ou resiliência)
-    if 'narrative_evidences' not in st.session_state: st.session_state.narrative_evidences = [] # [{'image': Image, 'type': 'vulnerability'/'resilience', 'vulnerability_name'/'test_name': '', 'severity': '', 'description': '', 'report_image_filename': '', 'raw_tool_output': '', 'id': uuid}]
+    if 'narrative_pentest_type' not in st.session_state: st.session_state.narrative_pentest_type = "Web Application"
+
+    # NOVOS: Listas separadas para evidências por categoria
+    if 'narrative_recon_evidences' not in st.session_state: st.session_state.narrative_recon_evidences = [] # [{'image': Image, 'description': '', 'report_image_filename': '', 'raw_tool_output': '', 'id': uuid}]
+    if 'narrative_vuln_evidences' not in st.session_state: st.session_state.narrative_vuln_evidences = [] # [{'image': Image, 'vulnerability_name': '', 'severity': '', 'description': '', 'report_image_filename': '', 'raw_tool_output': '', 'id': uuid}]
+    if 'narrative_resilience_evidences' not in st.session_state: st.session_state.narrative_resilience_evidences = [] # [{'image': Image, 'test_name': '', 'description': '', 'report_image_filename': '', 'raw_tool_output': '', 'id': uuid}]
+
     if 'generated_narrative_output' not in st.session_state: st.session_state.generated_narrative_output = ""
-    if 'narrative_summary_output' not in st.session_state: st.session_state.narrative_summary_output = "" # Agora é a mesma conclusão que o LLM gera no final da narrativa.
-    if 'narrative_pentest_type' not in st.session_state: st.session_state.narrative_pentest_type = "Web Application" # NOVO: Tipo de Pentest para narrativa
+    if 'narrative_summary_output' not in st.session_state: st.session_state.narrative_summary_output = ""
 
 
     def reset_narrative_generator():
         st.session_state.narrative_client_name = ""
         st.session_state.narrative_app_name = ""
-        st.session_state.narrative_evidences = []
+        st.session_state.narrative_pentest_type = "Web Application"
+        st.session_state.narrative_recon_evidences = [] # Reset das novas listas
+        st.session_state.narrative_vuln_evidences = []
+        st.session_state.narrative_resilience_evidences = []
         st.session_state.generated_narrative_output = ""
         st.session_state.narrative_summary_output = ""
-        st.session_state.narrative_pentest_type = "Web Application" # NOVO: Reset do tipo de pentest
         logging.info("Pentest Narrative Generator: Reset de campos.")
         st.rerun()
 
@@ -2337,139 +2354,169 @@ def pentest_narrative_generator_page(llm_model_vision, llm_model_text):
         placeholder="Ex: Plataforma de E-commerce",
         key="narrative_app_input"
     )
-    # --- NOVO: Seleção do Tipo de Pentest para narrativa ---
     pentest_type_options = ["Web Application", "API", "Infrastructure", "Mobile"]
     st.session_state.narrative_pentest_type = st.selectbox(
         "Tipo de Pentest Principal:",
         options=pentest_type_options,
         index=pentest_type_options.index(st.session_state.narrative_pentest_type),
-        key="narrative_pentest_type_select_narrative", # Renomeado para evitar conflito com global_select
+        key="narrative_pentest_type_select_narrative",
         help="O LLM adaptará a narrativa e o foco das vulnerabilidades com base neste tipo de pentest."
     )
-    # --- FIM NOVO ---
 
+    st.subheader("2. Upload e Detalhamento das Evidências por Categoria")
+    st.info("Para cada seção, faça upload de imagens e detalhe os achados. O nome do arquivo da imagem será usado para referência no relatório.")
 
-    st.subheader("2. Upload de Evidências e Detalhes")
-    st.info("Para cada evidência, faça upload da imagem e detalhe o achado. **Muito importante:** Indique se é uma **vulnerabilidade** ou um **teste de resiliência (sem falha)**, e forneça o nome do arquivo da imagem como ela será referenciada no seu relatório (Ex: `osint.jpg`). Opcionalmente, cole o output bruto da ferramenta para uma análise mais precisa.")
-
-    new_narrative_files = st.file_uploader(
-        "Adicione imagens de evidência (JPG, JPEG, PNG). Você pode adicionar várias de uma vez.",
+    # --- Seção de Evidências de Reconhecimento e Mapeamento ---
+    st.markdown("#### Evidências de Reconhecimento e Mapeamento")
+    new_recon_files = st.file_uploader(
+        "Adicionar imagens para Reconhecimento e Mapeamento:",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True,
-        key="narrative_evidence_uploader"
+        key="recon_evidence_uploader"
     )
-
-    if new_narrative_files:
-        # Usar um conjunto de fingerprints para evitar duplicação
-        existing_fingerprints = {
-            (e['name'], e['image'].size) for e in st.session_state.narrative_evidences if 'name' in e and 'image' in e
-        }
-        for uploaded_file in new_narrative_files:
+    if new_recon_files:
+        existing_fingerprints = {(e['name'], e['image'].size) for e in st.session_state.narrative_recon_evidences if 'name' in e and 'image' in e}
+        for uploaded_file in new_recon_files:
             try:
                 img_bytes = uploaded_file.getvalue()
                 img = Image.open(BytesIO(img_bytes))
                 file_fingerprint = (uploaded_file.name, img.size)
-
                 if file_fingerprint not in existing_fingerprints:
-                    st.session_state.narrative_evidences.append({
-                        'image': img,
-                        'type': 'Vulnerabilidade Encontrada', # Default
-                        'vulnerability_name': '', # Para vulnerabilidade
-                        'test_name': '', # Para resiliência
-                        'severity': 'Média', # Default para vulnerabilidade
-                        'description': '', 
-                        'report_image_filename': uploaded_file.name, # Sugestão de filename
-                        'name': uploaded_file.name, 
-                        'id': str(uuid.uuid4()),
-                        'raw_tool_output': '' # NOVO: Inicializa o campo para output bruto
+                    st.session_state.narrative_recon_evidences.append({
+                        'image': img, 'description': '', 'report_image_filename': uploaded_file.name,
+                        'raw_tool_output': '', 'id': str(uuid.uuid4()), 'name': uploaded_file.name
                     })
-                    logging.info(f"Narrative Generator: Imagem '{uploaded_file.name}' carregada.")
-                else:
-                    st.info(f"Arquivo '{uploaded_file.name}' já carregado. Ignorando duplicata.")
-                    logging.info(f"Narrative Generator: Imagem '{uploaded_file.name}' duplicada ignorada.")
-            except Exception as e:
-                st.error(f"Erro ao carregar a imagem {uploaded_file.name}: {e}")
-                logging.error(f"Narrative Generator: Erro ao carregar imagem '{uploaded_file.name}': {e}.")
+                    logging.info(f"Narrative Generator: Recon evidence '{uploaded_file.name}' loaded.")
+                else: st.info(f"Arquivo '{uploaded_file.name}' já carregado (Recon).")
+            except Exception as e: st.error(f"Erro ao carregar imagem para Recon: {e}"); logging.error(f"Narrative Generator: Error loading recon image: {e}.")
+    
+    recon_evidences_to_remove = []
+    for i, evidence in enumerate(st.session_state.narrative_recon_evidences):
+        st.markdown(f"**Recon Evidência {i+1}:** `{evidence['name']}`")
+        st.image(evidence['image'], use_container_width=True)
+        st.session_state.narrative_recon_evidences[i]['description'] = st.text_area(
+            "Descrição do Achado de Reconhecimento:", value=evidence['description'],
+            placeholder="Ex: 'Esta imagem mostra os subdomínios descobertos via OSINT, incluindo dev.exemplo.com.'",
+            key=f"recon_desc_{evidence['id']}", height=70
+        )
+        st.session_state.narrative_recon_evidences[i]['report_image_filename'] = st.text_input(
+            "Nome do Arquivo da Imagem (Ex: `subdominios.png`):", value=evidence['report_image_filename'],
+            placeholder="nome-da-imagem.jpg", key=f"recon_filename_{evidence['id']}"
+        )
+        st.session_state.narrative_recon_evidences[i]['raw_tool_output'] = st.text_area(
+            "Output Bruto da Ferramenta (Opcional para Recon):", value=evidence['raw_tool_output'],
+            placeholder="Cole o output do Subfinder/Nmap/etc. aqui.",
+            key=f"recon_raw_output_{evidence['id']}", height=100
+        )
+        if st.button(f"Remover Recon Evidência {i+1}", key=f"remove_recon_evidence_btn_{evidence['id']}"): recon_evidences_to_remove.append(i)
+    for index in sorted(recon_evidences_to_remove, reverse=True): del st.session_state.narrative_recon_evidences[index]; st.rerun()
 
-    if st.session_state.narrative_evidences:
-        st.markdown("#### Evidências Carregadas e Detalhes:")
-        evidences_to_remove = []
-        for i, evidence in enumerate(st.session_state.narrative_evidences):
-            st.markdown(f"---")
-            st.markdown(f"**Evidência {i+1}:** `{evidence['name']}`")
-            st.image(evidence['image'], use_container_width=True)
+    # --- Seção de Evidências de Vulnerabilidades Encontradas ---
+    st.markdown("---")
+    st.markdown("#### Evidências de Vulnerabilidades Encontradas")
+    new_vuln_files = st.file_uploader(
+        "Adicionar imagens para Vulnerabilidades Encontradas:",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True,
+        key="vuln_evidence_uploader"
+    )
+    if new_vuln_files:
+        existing_fingerprints = {(e['name'], e['image'].size) for e in st.session_state.narrative_vuln_evidences if 'name' in e and 'image' in e}
+        for uploaded_file in new_vuln_files:
+            try:
+                img_bytes = uploaded_file.getvalue()
+                img = Image.open(BytesIO(img_bytes))
+                file_fingerprint = (uploaded_file.name, img.size)
+                if file_fingerprint not in existing_fingerprints:
+                    st.session_state.narrative_vuln_evidences.append({
+                        'image': img, 'vulnerability_name': '', 'severity': 'Média',
+                        'description': '', 'report_image_filename': uploaded_file.name,
+                        'raw_tool_output': '', 'id': str(uuid.uuid4()), 'name': uploaded_file.name
+                    })
+                    logging.info(f"Narrative Generator: Vuln evidence '{uploaded_file.name}' loaded.")
+                else: st.info(f"Arquivo '{uploaded_file.name}' já carregado (Vuln).")
+            except Exception as e: st.error(f"Erro ao carregar imagem para Vuln: {e}"); logging.error(f"Narrative Generator: Error loading vuln image: {e}.")
 
-            # Tipo de Achado
-            evidence_type_options = ["Vulnerabilidade Encontrada", "Teste de Resiliência (Sem Falha)"]
-            st.session_state.narrative_evidences[i]['type'] = st.radio(
-                f"Tipo de Achado da Evidência {i+1}:",
-                options=evidence_type_options,
-                index=0 if evidence['type'] == "Vulnerabilidade Encontrada" else 1,
-                key=f"evidence_type_{evidence['id']}"
-            )
+    vuln_evidences_to_remove = []
+    for i, evidence in enumerate(st.session_state.narrative_vuln_evidences):
+        st.markdown(f"**Vulnerabilidade Evidência {i+1}:** `{evidence['name']}`")
+        st.image(evidence['image'], use_container_width=True)
+        st.session_state.narrative_vuln_evidences[i]['vulnerability_name'] = st.text_input(
+            "Nome da Vulnerabilidade:", value=evidence['vulnerability_name'],
+            placeholder="Ex: Clickjacking, SQL Injection", key=f"vuln_name_{evidence['id']}"
+        )
+        st.session_state.narrative_vuln_evidences[i]['severity'] = st.selectbox(
+            "Severidade da Vulnerabilidade:", options=["Crítica", "Alta", "Média", "Baixa", "Informativa"],
+            index=["Crítica", "Alta", "Média", "Baixa", "Informativa"].index(evidence['severity']),
+            key=f"vuln_severity_{evidence['id']}"
+        )
+        st.session_state.narrative_vuln_evidences[i]['description'] = st.text_area(
+            "Descrição do Problema (como foi explorada, impacto):", value=evidence['description'],
+            placeholder="Ex: 'Foi possível sobrepor a página de login e induzir cliques no botão de submissão, evidência de Clickjacking.'",
+            key=f"vuln_desc_{evidence['id']}", height=100
+        )
+        st.session_state.narrative_vuln_evidences[i]['report_image_filename'] = st.text_input(
+            "Nome do Arquivo da Imagem (Ex: `clickjacking_poc.png`):", value=evidence['report_image_filename'],
+            placeholder="nome-da-imagem.jpg", key=f"vuln_filename_{evidence['id']}"
+        )
+        st.session_state.narrative_vuln_evidences[i]['raw_tool_output'] = st.text_area(
+            "Output Bruto da Ferramenta (Opcional para Vuln):", value=evidence['raw_tool_output'],
+            placeholder="Cole o output do Burp, Acunetix, etc. aqui.",
+            key=f"vuln_raw_output_{evidence['id']}", height=100
+        )
+        if st.button(f"Remover Vuln Evidência {i+1}", key=f"remove_vuln_evidence_btn_{evidence['id']}"): vuln_evidences_to_remove.append(i)
+    for index in sorted(vuln_evidences_to_remove, reverse=True): del st.session_state.narrative_vuln_evidences[index]; st.rerun()
 
-            if st.session_state.narrative_evidences[i]['type'] == "Vulnerabilidade Encontrada":
-                st.session_state.narrative_evidences[i]['vulnerability_name'] = st.text_input(
-                    "Nome da Vulnerabilidade:",
-                    value=evidence['vulnerability_name'],
-                    placeholder="Ex: Clickjacking, SQL Injection, XSS Refletido",
-                    key=f"vuln_name_{evidence['id']}"
-                )
-                st.session_state.narrative_evidences[i]['severity'] = st.selectbox(
-                    "Severidade da Vulnerabilidade:",
-                    options=["Crítica", "Alta", "Média", "Baixa", "Informativa"],
-                    index=["Crítica", "Alta", "Média", "Baixa", "Informativa"].index(evidence['severity']),
-                    key=f"severity_{evidence['id']}"
-                )
-                st.session_state.narrative_evidences[i]['description'] = st.text_area(
-                    "Descrição do Problema (foco na falha, impacto, e como foi explorada):",
-                    value=evidence['description'],
-                    placeholder="Ex: 'Esta imagem demonstra que a aplicação é vulnerável a Clickjacking, pois foi possível sobrepor um iframe malicioso e induzir cliques no botão de compra.'",
-                    key=f"vuln_desc_{evidence['id']}",
-                    height=100
-                )
-            else: # Teste de Resiliência (Sem Falha)
-                st.session_state.narrative_evidences[i]['test_name'] = st.text_input(
-                    "Nome do Teste de Resiliência:",
-                    value=evidence['test_name'],
-                    placeholder="Ex: Validação de Proteção contra Clickjacking, Fuzzing de Injeção XSS",
-                    key=f"test_name_{evidence['id']}"
-                )
-                st.session_state.narrative_evidences[i]['description'] = st.text_area(
-                    "Descrição do Teste e Resultado Positivo (foco na ausência da falha e controles):",
-                    value=evidence['description'],
-                    placeholder="Ex: 'Esta imagem mostra a tentativa de Clickjacking que foi bloqueada devido à configuração do cabeçalho X-Frame-Options, comprovando a resiliência da aplicação.'",
-                    key=f"resil_desc_{evidence['id']}",
-                    height=100
-                )
-                # Severidade não se aplica, mas para manter a estrutura, pode ser "Informativa"
-                st.session_state.narrative_evidences[i]['severity'] = "Informativa" 
+    # --- Seção de Evidências de Testes de Resiliência (Sem Falha) ---
+    st.markdown("---")
+    st.markdown("#### Evidências de Testes de Resiliência (Sem Falha)")
+    new_resilience_files = st.file_uploader(
+        "Adicionar imagens para Testes de Resiliência:",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True,
+        key="resilience_evidence_uploader"
+    )
+    if new_resilience_files:
+        existing_fingerprints = {(e['name'], e['image'].size) for e in st.session_state.narrative_resilience_evidences if 'name' in e and 'image' in e}
+        for uploaded_file in new_resilience_files:
+            try:
+                img_bytes = uploaded_file.getvalue()
+                img = Image.open(BytesIO(img_bytes))
+                file_fingerprint = (uploaded_file.name, img.size)
+                if file_fingerprint not in existing_fingerprints:
+                    st.session_state.narrative_resilience_evidences.append({
+                        'image': img, 'test_name': '', 'description': '',
+                        'report_image_filename': uploaded_file.name, 'raw_tool_output': '',
+                        'id': str(uuid.uuid4()), 'name': uploaded_file.name
+                    })
+                    logging.info(f"Narrative Generator: Resilience evidence '{uploaded_file.name}' loaded.")
+                else: st.info(f"Arquivo '{uploaded_file.name}' já carregado (Resilience).")
+            except Exception as e: st.error(f"Erro ao carregar imagem para Resiliência: {e}"); logging.error(f"Narrative Generator: Error loading resilience image: {e}.")
 
-
-            st.session_state.narrative_evidences[i]['report_image_filename'] = st.text_input(
-                "Nome do Arquivo da Imagem (Ex: `osint.jpg`, `painel_admin.png`):",
-                value=evidence['report_image_filename'],
-                placeholder="nome-da-imagem.jpg", # Sugere o nome do arquivo padrão
-                key=f"report_filename_{evidence['id']}"
-            )
-            # --- NOVO: Campo para Output Bruto da Ferramenta ---
-            st.session_state.narrative_evidences[i]['raw_tool_output'] = st.text_area(
-                "Output Bruto da Ferramenta (Opcional, ex: JSON/XML de scanner, log de terminal):",
-                value=evidence.get('raw_tool_output', ''), # Pega o valor existente ou string vazia
-                placeholder="Cole aqui o output RAW do Burp, Acunetix, Invicti, Nmap, etc. (ajuda o LLM a ser mais preciso).",
-                key=f"raw_output_{evidence['id']}",
-                height=150
-            )
-            # --- FIM NOVO ---
-
-            if st.button(f"Remover Evidência {i+1}", key=f"remove_narrative_evidence_btn_{evidence['id']}"):
-                evidences_to_remove.append(i)
-        
-        if evidences_to_remove:
-            for index in sorted(evidences_to_remove, reverse=True):
-                logging.info(f"Narrative Generator: Evidência '{st.session_state.narrative_evidences[index].get('name', 'N/A')}' removida.")
-                del st.session_state.narrative_evidences[index]
-            st.rerun()
+    resilience_evidences_to_remove = []
+    for i, evidence in enumerate(st.session_state.narrative_resilience_evidences):
+        st.markdown(f"**Resiliência Evidência {i+1}:** `{evidence['name']}`")
+        st.image(evidence['image'], use_container_width=True)
+        st.session_state.narrative_resilience_evidences[i]['test_name'] = st.text_input(
+            "Nome do Teste de Resiliência:", value=evidence['test_name'],
+            placeholder="Ex: Validação de Proteção contra Clickjacking, Teste de CORS", key=f"resilience_test_name_{evidence['id']}"
+        )
+        st.session_state.narrative_resilience_evidences[i]['description'] = st.text_area(
+            "Descrição do Teste e Resultado Positivo (como a aplicação demonstrou resiliência):", value=evidence['description'],
+            placeholder="Ex: 'Esta imagem mostra que o cabeçalho X-Frame-Options está configurado corretamente, impedindo o Clickjacking.'",
+            key=f"resilience_desc_{evidence['id']}", height=100
+        )
+        st.session_state.narrative_resilience_evidences[i]['report_image_filename'] = st.text_input(
+            "Nome do Arquivo da Imagem (Ex: `cors_ok.png`):", value=evidence['report_image_filename'],
+            placeholder="nome-da-imagem.jpg", key=f"resilience_filename_{evidence['id']}"
+        )
+        st.session_state.narrative_resilience_evidences[i]['raw_tool_output'] = st.text_area(
+            "Output Bruto da Ferramenta (Opcional para Resiliência):", value=evidence['raw_tool_output'],
+            placeholder="Cole o output do teste aqui (ex: cabeçalho de resposta HTTP).",
+            key=f"resilience_raw_output_{evidence['id']}", height=100
+        )
+        if st.button(f"Remover Resiliência Evidência {i+1}", key=f"remove_resilience_evidence_btn_{evidence['id']}"): resilience_evidences_to_remove.append(i)
+    for index in sorted(resilience_evidences_to_remove, reverse=True): del st.session_state.narrative_resilience_evidences[index]; st.rerun()
 
     st.subheader("3. Gerar Narrativa")
     if st.button("Gerar Narrativa de Pentest", key="generate_narrative_button"):
@@ -2477,100 +2524,118 @@ def pentest_narrative_generator_page(llm_model_vision, llm_model_text):
             st.error("Por favor, preencha o Nome do Cliente e o Nome da Aplicação.")
             logging.warning("Narrative Generator: Geração abortada, dados do projeto incompletos.")
             return
-        if not st.session_state.narrative_evidences:
-            st.error("Por favor, adicione pelo menos uma evidência.")
+        
+        # Validar que pelo menos UMA evidência de qualquer tipo foi adicionada
+        if not (st.session_state.narrative_recon_evidences or st.session_state.narrative_vuln_evidences or st.session_state.narrative_resilience_evidences):
+            st.error("Por favor, adicione pelo menos uma evidência em qualquer uma das categorias.")
             logging.warning("Narrative Generator: Geração abortada, nenhuma evidência adicionada.")
             return
-        
-        # Validação mais detalhada das evidências
-        for i, evidence in enumerate(st.session_state.narrative_evidences):
-            if not evidence['description'] or not evidence['report_image_filename']:
-                st.error(f"Por favor, preencha a descrição e o nome do arquivo da imagem para todas as evidências (Evidência {i+1}: '{evidence['name']}').")
-                logging.warning(f"Narrative Generator: Geração abortada, evidência '{evidence['name']}' incompleta (descrição/nome do arquivo).")
-                return
-            if evidence['type'] == "Vulnerabilidade Encontrada" and not evidence['vulnerability_name']:
-                st.error(f"Por favor, preencha o 'Nome da Vulnerabilidade' para a Evidência {i+1} ('{evidence['name']}').")
-                logging.warning(f"Narrative Generator: Geração abortada, evidência '{evidence['name']}' incompleta (nome da vulnerabilidade).")
-                return
-            if evidence['type'] == "Teste de Resiliência (Sem Falha)" and not evidence['test_name']:
-                st.error(f"Por favor, preencha o 'Nome do Teste de Resiliência' para a Evidência {i+1} ('{evidence['name']}').")
-                logging.warning(f"Narrative Generator: Geração abortada, evidência '{evidence['name']}' incompleta (nome do teste).")
-                return
 
+        # Validação mais detalhada de cada evidência antes de enviar ao LLM
+        for i, evidence in enumerate(st.session_state.narrative_recon_evidences):
+            if not evidence['description'] or not evidence['report_image_filename']:
+                st.error(f"Reconhecimento Evidência {i+1}: Por favor, preencha a descrição e o nome do arquivo da imagem.")
+                logging.warning(f"Narrative Generator: Recon evidence {i+1} incomplete.")
+                return
+        for i, evidence in enumerate(st.session_state.narrative_vuln_evidences):
+            if not evidence['vulnerability_name'] or not evidence['description'] or not evidence['report_image_filename']:
+                st.error(f"Vulnerabilidade Evidência {i+1}: Por favor, preencha o nome, descrição e o nome do arquivo da imagem.")
+                logging.warning(f"Narrative Generator: Vuln evidence {i+1} incomplete.")
+                return
+        for i, evidence in enumerate(st.session_state.narrative_resilience_evidences):
+            if not evidence['test_name'] or not evidence['description'] or not evidence['report_image_filename']:
+                st.error(f"Resiliência Evidência {i+1}: Por favor, preencha o nome do teste, descrição e o nome do arquivo da imagem.")
+                logging.warning(f"Narrative Generator: Resilience evidence {i+1} incomplete.")
+                return
 
         with st.spinner("Gerando narrativa de pentest..."):
             logging.info(f"Narrative Generator: Iniciando geração para {st.session_state.narrative_client_name}/{st.session_state.narrative_app_name}.")
 
-            # --- SEÇÕES DO RELATÓRIO ---
-            # O LLM será instruído a preencher estas seções
-            # Mantemos estas seções aqui para que o LLM as utilize como estrutura.
-            # A introdução é fixa, o resto é preenchido pelo LLM.
-            report_sections_template = {
-                "Introdução": f"""
-Foram conduzidos testes de segurança abrangentes com o objetivo de avaliar a robustez e a segurança da aplicação web **{st.session_state.narrative_app_name}** pertencente ao cliente **{st.session_state.narrative_client_name}**. Durante essa avaliação, foram executadas diversas Provas de Conceito (PoCs) para identificar possíveis vulnerabilidades, com base nos padrões da **OWASP Top 10** e nas melhores práticas da **Pentest Execution Standard (PTES)**.
+            # --- MODELO DE NARRATIVA BASE ---
+            narrative_template = f"""
+## Introdução
+
+Foram conduzidos testes de segurança abrangentes com o objetivo de avaliar a robustez e a segurança da aplicação **{st.session_state.narrative_app_name}** pertencente ao cliente **{st.session_state.narrative_client_name}**. Durante essa avaliação, foram executadas diversas Provas de Conceito (PoCs) para identificar possíveis vulnerabilidades, com base nos padrões da **OWASP Top 10**, **OWASP Mobile Top 10 (2024)** e nas melhores práticas da **Pentest Execution Standard (PTES)**.
 
 Esses testes visaram localizar vulnerabilidades que poderiam comprometer a confidencialidade, integridade ou disponibilidade da aplicação, permitindo uma análise detalhada dos riscos potenciais e auxiliando na implementação de medidas de correção e mitigação.
-""",
-                "Achados de Reconhecimento e Mapeamento": "",
-                "Vulnerabilidades Identificadas e Detalhamento": "",
-                "Verificações de Segurança e Resiliência": "",
-                "Conclusão e Recomendações Finais": ""
+
+## Achados de Reconhecimento e Mapeamento
+
+## Vulnerabilidades Identificadas e Detalhamento
+
+## Verificações de Segurança e Resiliência
+
+## Conclusão e Recomendações Finais
+
+"""
+
+            # Prepara as evidências CATEGORIZADAS para o LLM
+            categorized_evidences_for_llm = {
+                "recon_evidences": [],
+                "vuln_evidences": [],
+                "resilience_evidences": []
             }
 
-            # Prepara as evidências para o LLM com as novas informações
-            evidences_for_llm_text_input = []
-            for i, ev in enumerate(st.session_state.narrative_evidences):
-                if ev['type'] == "Vulnerabilidade Encontrada":
-                    ev_text = (
-                        f"EVIDÊNCIA {i+1} (Tipo: Vulnerabilidade):\n"
-                        f"Nome da Vulnerabilidade: {ev['vulnerability_name']}\n"
-                        f"Severidade: {ev['severity']}\n"
-                        f"Descrição do Problema: {ev['description']}\n"
-                        f"Nome do arquivo da imagem: {ev['report_image_filename']}\n"
-                        f"Output Bruto da Ferramenta: {'(Nenhum fornecido)' if not ev['raw_tool_output'] else ev['raw_tool_output']}\n" # NOVO: Inclui raw_tool_output
-                        f"--------------------"
-                    )
-                else: # Teste de Resiliência (Sem Falha)
-                    ev_text = (
-                        f"EVIDÊNCIA {i+1} (Tipo: Resiliência - Sem Falha):\n"
-                        f"Nome do Teste: {ev['test_name']}\n"
-                        f"Descrição do Teste e Resultado Positivo: {ev['description']}\n"
-                        f"Nome do arquivo da imagem: {ev['report_image_filename']}\n"
-                        f"Output Bruto da Ferramenta: {'(Nenhum fornecido)' if not ev['raw_tool_output'] else ev['raw_tool_output']}\n" # NOVO: Inclui raw_tool_output
-                        f"--------------------"
-                    )
-                evidences_for_llm_text_input.append(ev_text)
+            for i, ev in enumerate(st.session_state.narrative_recon_evidences):
+                categorized_evidences_for_llm["recon_evidences"].append(
+                    f"RECONHECIMENTO EVIDÊNCIA {i+1}:\n"
+                    f"Descrição: {ev['description']}\n"
+                    f"Nome do arquivo da imagem: {ev['report_image_filename']}\n"
+                    f"Output Bruto da Ferramenta: {'(Nenhum fornecido)' if not ev['raw_tool_output'] else ev['raw_tool_output']}\n"
+                    f"--------------------"
+                )
             
+            for i, ev in enumerate(st.session_state.narrative_vuln_evidences):
+                categorized_evidences_for_llm["vuln_evidences"].append(
+                    f"VULNERABILIDADE EVIDÊNCIA {i+1}:\n"
+                    f"Nome da Vulnerabilidade: {ev['vulnerability_name']}\n"
+                    f"Severidade: {ev['severity']}\n"
+                    f"Descrição do Problema: {ev['description']}\n"
+                    f"Nome do arquivo da imagem: {ev['report_image_filename']}\n"
+                    f"Output Bruto da Ferramenta: {'(Nenhum fornecido)' if not ev['raw_tool_output'] else ev['raw_tool_output']}\n"
+                    f"--------------------"
+                )
+            
+            for i, ev in enumerate(st.session_state.narrative_resilience_evidences):
+                categorized_evidences_for_llm["resilience_evidences"].append(
+                    f"RESILIÊNCIA EVIDÊNCIA {i+1}:\n"
+                    f"Nome do Teste: {ev['test_name']}\n"
+                    f"Descrição do Teste e Resultado Positivo: {ev['description']}\n"
+                    f"Nome do arquivo da imagem: {ev['report_image_filename']}\n"
+                    f"Output Bruto da Ferramenta: {'(Nenhum fornecido)' if not ev['raw_tool_output'] else ev['raw_tool_output']}\n"
+                    f"--------------------"
+                )
+
             # --- INJETANDO O CONTEXTO GLOBAL ---
             global_context_prompt = get_global_context_prompt()
             # --- FIM INJEÇÃO DE CONTEXTO ---
 
             prompt_instructions = (
-                f"Você é um especialista em segurança da informação e pentest, com vasta experiência na redação de relatórios técnicos de pentest. "
-                f"{global_context_prompt}" # INJETANDO CONTEXTO GLOBAL
+                f"Você é um especialista em segurança da informação e pentest, com vasta experiência na redação de relatórios técnicos de pentest."
+                f"{global_context_prompt}"
                 f"\n\nSua tarefa é gerar uma narrativa de relatório de pentest abrangente e profissional para a aplicação '{st.session_state.narrative_app_name}' do cliente '{st.session_state.narrative_client_name}'. "
-                f"O tipo principal de pentest é '{st.session_state.narrative_pentest_type}'. Ajuste sua linguagem, o foco das vulnerabilidades e prioridade de achados a isso." # NOVO: Inclui tipo de pentest
-                f"\n\nVocê receberá um modelo de narrativa com seções principais e uma lista de evidências (com seus detalhes, descrições, nomes de arquivo de imagem e, **opcionalmente, outputs brutos de ferramentas**). Seu objetivo é:"
-                f"\n1.  **Preencher e Expandir as seções principais do modelo** com base nas evidências fornecidas. Mantenha os títulos das seções principais (`## Introdução`, `## Achados de Reconhecimento e Mapeamento`, etc.) exatamente como estão."
-                f"\n2.  Para cada **evidência do tipo 'Vulnerabilidade Encontrada'**: Crie um subtítulo `### [Nome da Vulnerabilidade]`. Descreva a vulnerabilidade em termos gerais. **Utilize o 'Output Bruto da Ferramenta' (se fornecido) para extrair detalhes técnicos como URL/parâmetros afetados, payloads, status code, etc., e incorpore-os na descrição do problema. Se não houver output bruto, utilize a 'Descrição do Problema' fornecida. Detalhe de forma aprofundada como a falha se manifestou, foi observada ou explorada na aplicação '{st.session_state.narrative_app_name}'. Seja técnico, detalhado e lógico, explicando o processo e o impacto imediato.** Forneça o impacto técnico e de negócio da exploração e uma recomendação técnica clara para mitigação. Insira a referência da imagem no formato `![](/images/name/[nome_do_arquivo_da_imagem]){{width=\"auto\"}}` logo abaixo do parágrafo que a descreve. Classifique a severidade."
-                f"\n3.  Para cada **evidência do tipo 'Teste de Resiliência (Sem Falha)'**: Crie um subtítulo `### [Nome do Teste]`. Descreva o teste realizado e seu objetivo. **Utilize o 'Output Bruto da Ferramenta' (se fornecido) para extrair detalhes que comprovem a ausência da falha, como logs de bloqueio, mensagens de erro esperadas, ou ausência de comportamentos maliciosos. Se não houver output bruto, utilize a 'Descrição do Teste e Resultado Positivo' fornecida. Detalhe de forma aprofundada e tecnológica como a aplicação demonstrou resiliência, explicando os controles de segurança que impediram a exploração. Destaque as boas práticas de segurança implementadas e a robustez do sistema.**. Reforce a importância desse controle. Insira a referência da imagem no formato `![](/images/name/[nome_do_arquivo_da_imagem]){{width=\"auto\"}}` logo abaixo do parágrafo que a descreve."
-                f"\n4.  **Organize os achados/testes nas seções mais apropriadas** do modelo (Reconhecimento e Mapeamento, Vulnerabilidades Identificadas, Verificações de Segurança e Resiliência). Priorize vulnerabilidades de maior severidade primeiro dentro de suas seções."
-                f"\n5.  A seção **'Conclusão e Recomendações Finais' deve ser a ÚLTIMA seção e aparecer APENAS UMA VEZ no documento.** Ela deve resumir o estado geral de segurança da aplicação '{st.session_state.narrative_app_name}', destacando os pontos fortes (testes de resiliência) e as principais áreas que exigem atenção (vulnerabilidades encontradas) e as recomendações contínuas, baseadas em *todos* os achados e testes."
-                f"\n6.  **Mantenha um tom técnico, claro, conciso e profissional em toda a narrativa.**"
-                f"\n7.  **Não inclua quaisquer notas adicionais, cabeçalhos de LLM, ou formatações extras que não sejam a narrativa final do relatório.**"
+                f"O tipo principal de pentest é '{st.session_state.narrative_pentest_type}'. Ajuste sua linguagem, o foco das vulnerabilidades e prioridade de achados a isso."
+                f"\n\nVocê receberá um modelo de narrativa com seções principais e **evidências pré-categorizadas** (Reconhecimento, Vulnerabilidades, Resiliência). Seu objetivo é:"
+                f"\n1.  **Preencher e Expandir as seções principais do modelo** com base nas evidências fornecidas em cada categoria. Mantenha os títulos das seções principais (`## Introdução`, `## Achados de Reconhecimento e Mapeamento`, etc.) exatamente como estão."
+                f"\n2.  Para cada **evidência de 'RECONHECIMENTO E MAPEAMENTO'**: Use a 'Descrição' e o 'Output Bruto da Ferramenta' (se fornecido) para elaborar um parágrafo detalhado sobre a atividade de reconhecimento e seus achados. Insira a referência da imagem no formato `![](/images/name/[nome_do_arquivo_da_imagem]){{width=\"auto\"}}` logo abaixo do parágrafo que a descreve."
+                f"\n3.  Para cada **evidência de 'VULNERABILIDADE'**: Crie um subtítulo `### [Nome da Vulnerabilidade]`. Descreva a vulnerabilidade em termos gerais. Utilize a 'Descrição do Problema' e o 'Output Bruto da Ferramenta' (se fornecido) para detalhar como a falha se manifestou/foi explorada e seu impacto. Forneça o impacto técnico/de negócio e uma recomendação técnica clara para mitigação. Insira a referência da imagem no formato `![](/images/name/[nome_do_arquivo_da_imagem]){{width=\"auto\"}}` logo abaixo do parágrafo. Classifique a severidade."
+                f"\n4.  Para cada **evidência de 'RESILIÊNCIA'**: Crie um subtítulo `### [Nome do Teste]`. Descreva o teste realizado e seu objetivo. Utilize a 'Descrição do Teste e Resultado Positivo' e o 'Output Bruto da Ferramenta' (se fornecido) para detalhar como a aplicação demonstrou resiliência, explicando os controles que impediram a exploração. Destaque as boas práticas. Insira a referência da imagem no formato `![](/images/name/[nome_do_arquivo_da_imagem]){{width=\"auto\"}}` logo abaixo do parágrafo."
+                f"\n5.  **Organize os achados/testes nas seções correspondentes**. Priorize vulnerabilidades de maior severidade primeiro dentro de suas seções."
+                f"\n6.  A seção **'Conclusão e Recomendações Finais' deve ser a ÚLTIMA seção e aparecer APENAS UMA VEZ no documento.** Resuma o estado geral de segurança da aplicação, destacando pontos fortes (resiliência) e áreas que exigem atenção (vulnerabilidades) e recomendações contínuas, baseadas em *todos* os achados."
+                f"\n7.  **Mantenha um tom técnico, claro, conciso e profissional em toda a narrativa.**"
+                f"\n8.  **Não inclua quaisquer notas adicionais, cabeçalhos de LLM, ou formatações extras que não sejam a narrativa final do relatório.**"
                 f"\n\n--- Modelo de Seções do Relatório ---\n"
-                + report_sections_template["Introdução"] +
-                f"## Achados de Reconhecimento e Mapeamento\n" +
-                f"## Vulnerabilidades Identificadas e Detalhamento\n" +
-                f"## Verificações de Segurança e Resiliência\n" +
-                f"## Conclusão e Recomendações Finais\n" +
-                f"\n--- Evidências Fornecidas (detalhes para preencher o modelo) ---\n"
+                + f"{narrative_template}" + # Injetando o template predefinido aqui
+                f"\n--- Evidências de Reconhecimento (para preencher o modelo) ---\n" +
+                "\n".join(categorized_evidences_for_llm["recon_evidences"]) +
+                f"\n--- Evidências de Vulnerabilidades (para preencher o modelo) ---\n" +
+                "\n".join(categorized_evidences_for_llm["vuln_evidences"]) +
+                f"\n--- Evidências de Resiliência (para preencher o modelo) ---\n" +
+                "\n".join(categorized_evidences_for_llm["resilience_evidences"])
             )
 
-            # Adicionar cada evidência ao prompt
-            full_prompt_text = prompt_instructions + "\n".join(evidences_for_llm_text_input)
-
-            generated_text_raw = obter_resposta_llm(llm_model_text, [full_prompt_text])
+            # A lógica de geração e extração da conclusão permanece a mesma
+            generated_text_raw = obter_resposta_llm(llm_model_text, [prompt_instructions])
 
             if generated_text_raw:
                 st.session_state.generated_narrative_output = generated_text_raw.strip()
@@ -2620,29 +2685,99 @@ Esses testes visaram localizar vulnerabilidades que poderiam comprometer a confi
         if cols_feedback_narrative[0].button("👍 Útil", key="narrative_feedback_good"):
             st.toast("Obrigado pelo seu feedback! Isso nos ajuda a melhorar.", icon="😊")
             logging.info("Feedback Pentest Narrative Generator: Útil.")
-        if cols_feedback_narrative[1].button("👎 Precisa de Melhoria", key="narrative_feedback_bad"):
+        if cols_cols_feedback[1].button("👎 Precisa de Melhoria", key="narrative_feedback_bad"):
             st.toast("Obrigado pelo seu feedback. Continuaremos trabalhando para aprimorar.", icon="😔")
             logging.info("Feedback Pentest Narrative Generator: Precisa de Melhoria.")
 
 # NOVO MÓDULO: Mobile App Static Analysis
+def parse_vulnerability_summary(text_response):
+    """Extrai o resumo de vulnerabilidades da resposta do LLM."""
+    summary = {
+        "Total": 0,
+        "Críticos": 0,
+        "Altos": 0,
+        "Médios": 0,
+        "Baixos": 0
+    }
+
+    # Procura pela linha de resumo
+    summary_line = None
+    lines = text_response.split('\n')
+    for line in lines:
+        if line.strip().startswith("Total de Achados"):
+            summary_line = line
+            break
+
+    if not summary_line:
+        logging.warning("Mobile Static Analyzer: Resumo de vulnerabilidades não encontrado na resposta do LLM.")
+        return summary
+
+    # Extrair números com regex
+    matches = re.findall(r'(\d+)', summary_line)
+    if len(matches) >= 5:
+        summary["Total"] = int(matches[0])
+        summary["Críticos"] = int(matches[1])
+        summary["Altos"] = int(matches[2])
+        summary["Médios"] = int(matches[3])
+        summary["Baixos"] = int(matches[4])
+
+    return summary
+
+
+def parse_vulnerability_details(text_response):
+    """Extrai os detalhes das vulnerabilidades a partir da resposta do LLM."""
+    details = []
+    blocks = re.split(r'\n\s*###\s*', text_response)[1:]  # Ignora o bloco antes do primeiro ###
+
+    for block in blocks:
+        lines = block.strip().split('\n')
+        if not lines:
+            continue
+
+        name = re.sub(r'\*\*Nome da Vulnerabilidade:\*\*', '', lines[0]).strip()
+        category = re.sub(r'\*\*Categoria OWASP Mobile.*:\*\*', '', lines[1]).strip()
+        severity = re.sub(r'\*\*Severidade/Risco:\*\*', '', lines[2]).strip()
+        location = re.sub(r'\*\*Localização na Especificação:\*\*', '', lines[3]).strip()
+        detail = re.sub(r'\*\*Detalhes:\*\*', '', lines[4]).strip()
+
+        if name and category and severity and location and detail:
+            details.append({
+                "name": name,
+                "category": category,
+                "severity": severity,
+                "location": location,
+                "details": detail
+            })
+
+    return details
+
+
 def mobile_app_static_analysis_page(llm_model_vision, llm_model_text):
     st.header("Mobile Static Analyzer 📱")
     st.markdown("""
-        Realize análise estática de segurança em aplicativos Android.
-        Faça upload de um arquivo `.zip` contendo o APK descompilado (saída de ferramentas como `apktool -d` ou `jadx -d`),
-        ou cole trechos de código ou o `AndroidManifest.xml` diretamente.
-        O HuntIA irá analisar o conteúdo para identificar vulnerabilidades com base na **OWASP Mobile Top 10** e fornecer recomendações.
-        **AVISO:** Esta é uma análise estática de *primeira linha* e não substitui uma revisão de código manual completa.
+    Realize análise estática de segurança em aplicativos Android.  
+    Faça upload de um arquivo `.zip` contendo o APK descompilado (saída de ferramentas como `apktool -d` ou `jadx -d`),  
+    ou cole trechos de código ou o `AndroidManifest.xml` diretamente.  
+
+    O HuntIA irá analisar o conteúdo para identificar vulnerabilidades com base na **OWASP Mobile Top 10** e fornecer recomendações.
+
+    ⚠️ **AVISO:** Esta é uma análise estática de *primeira linha* e não substitui uma revisão de código manual completa.
     """)
     logging.info("Página Mobile Static Analyzer acessada.")
 
-    # Variáveis de sessão para esta página
-    if 'mobile_analysis_type' not in st.session_state: st.session_state.mobile_analysis_type = "Upload ZIP (APK Descompilado)"
-    if 'uploaded_decompiled_zip' not in st.session_state: st.session_state.uploaded_decompiled_zip = None
-    if 'manifest_content' not in st.session_state: st.session_state.manifest_content = ""
-    if 'code_snippet_content' not in st.session_state: st.session_state.code_snippet_content = ""
-    if 'mobile_analysis_result' not in st.session_state: st.session_state.mobile_analysis_result = ""
-    if 'mobile_analysis_summary' not in st.session_state: st.session_state.mobile_analysis_summary = None
+    # Inicializar variáveis de sessão
+    if 'mobile_analysis_type' not in st.session_state:
+        st.session_state.mobile_analysis_type = "Upload ZIP (APK Descompilado)"
+    if 'uploaded_decompiled_zip' not in st.session_state:
+        st.session_state.uploaded_decompiled_zip = None
+    if 'manifest_content' not in st.session_state:
+        st.session_state.manifest_content = ""
+    if 'code_snippet_content' not in st.session_state:
+        st.session_state.code_snippet_content = ""
+    if 'mobile_analysis_result' not in st.session_state:
+        st.session_state.mobile_analysis_result = ""
+    if 'mobile_analysis_summary' not in st.session_state:
+        st.session_state.mobile_analysis_summary = None
 
     def reset_mobile_analysis():
         st.session_state.mobile_analysis_type = "Upload ZIP (APK Descompilado)"
@@ -2657,164 +2792,157 @@ def mobile_app_static_analysis_page(llm_model_vision, llm_model_text):
     if st.button("Limpar Análise Mobile", key="reset_mobile_analysis_button"):
         reset_mobile_analysis()
 
-    analysis_type_options = ["Upload ZIP (APK Descompilado)", "Colar AndroidManifest.xml", "Colar Trecho de Código (Java/Smali/Kotlin)"]
+    # Tipo de análise
+    analysis_type_options = [
+        "Upload ZIP (APK Descompilado)",
+        "Colar AndroidManifest.xml",
+        "Colar Trecho de Código (Java/Smali/Kotlin)"
+    ]
     st.session_state.mobile_analysis_type = st.radio(
         "Como deseja fornecer o conteúdo para análise?",
         options=analysis_type_options,
         key="mobile_analysis_type_radio"
     )
 
-    analyzed_content = "" # Conteúdo que será enviado para o LLM
-    analysis_context = "" # Contexto adicional para o prompt
+    analyzed_content = ""
+    analysis_context = ""
 
+    # Upload ZIP
     if st.session_state.mobile_analysis_type == "Upload ZIP (APK Descompilado)":
-        uploaded_zip_file = st.file_uploader(
-            "Selecione o arquivo .zip do APK descompilado:",
-            type=["zip"],
-            key="mobile_zip_uploader"
-        )
+        uploaded_zip_file = st.file_uploader("Selecione o arquivo .zip do APK descompilado:", type=["zip"], key="mobile_zip_uploader")
         if uploaded_zip_file:
             st.session_state.uploaded_decompiled_zip = uploaded_zip_file
-            # Processar o ZIP
             with tempfile.TemporaryDirectory() as tmpdir:
                 try:
                     with zipfile.ZipFile(uploaded_zip_file, 'r') as zip_ref:
                         zip_ref.extractall(tmpdir)
-                    logging.info(f"Mobile Static Analyzer: ZIP descompactado para {tmpdir}.")
 
-                    # Tentar encontrar AndroidManifest.xml
                     manifest_path = os.path.join(tmpdir, "AndroidManifest.xml")
                     if os.path.exists(manifest_path):
                         with open(manifest_path, 'r', encoding='utf-8', errors='ignore') as f:
                             st.session_state.manifest_content = f.read()
-                        analysis_context += f"Conteúdo do AndroidManifest.xml:\n```xml\n{st.session_state.manifest_content}\n```\n\n"
-                        logging.info("Mobile Static Analyzer: AndroidManifest.xml encontrado e lido.")
-                    else:
-                        st.warning("AndroidManifest.xml não encontrado no ZIP descompactado. A análise pode ser limitada.")
-                        logging.warning("Mobile Static Analyzer: AndroidManifest.xml não encontrado no ZIP.")
+                        analysis_context += f"Conteúdo do AndroidManifest.xml:```xml{st.session_state.manifest_content}```"
 
-                    # Tentar encontrar arquivos de código relevantes (limitar o tamanho para não estourar tokens)
                     code_files_content = []
-                    code_file_count = 0
-                    max_code_size = 200 * 1024 # Limite de 200KB de código por enquanto
+                    max_code_size = 200 * 1024  # 200KB
                     current_code_size = 0
+                    code_file_count = 0
 
                     for root, _, files in os.walk(tmpdir):
                         for file in files:
-                            if (file.endswith('.java') or file.endswith('.kt') or file.endswith('.smali')) and current_code_size < max_code_size:
+                            if file.endswith(".java") or file.endswith(".smali") or file.endswith(".kt"):
                                 file_path = os.path.join(root, file)
-                                try:
-                                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                        content = f.read()
-                                        if current_code_size + len(content) < max_code_size:
-                                            code_files_content.append(f"--- Código de: {os.path.relpath(file_path, tmpdir)} ---\n{content}\n")
-                                            current_code_size += len(content)
-                                            code_file_count += 1
-                                        else:
-                                            logging.info(f"Mobile Static Analyzer: Limite de tamanho de código atingido. Ignorando {file}.")
-                                            break # Para de ler arquivos de código
-                                except Exception as e:
-                                    logging.error(f"Mobile Static Analyzer: Erro ao ler arquivo de código {file_path}: {e}")
-                                    pass
-                        if current_code_size >= max_code_size: # Para de andar nas pastas se o limite foi atingido
-                            break 
-                    
+                                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                    content = f.read()
+                                    if current_code_size + len(content) > max_code_size:
+                                        logging.info("Mobile Static Analyzer: Limite de tamanho de código atingido.")
+                                        break
+                                    code_files_content.append(f"- Código de: {file}\n{content}")
+                                    current_code_size += len(content)
+                                    code_file_count += 1
+
+                        if current_code_size >= max_code_size:
+                            break
+
                     if code_files_content:
-                        st.session_state.code_snippet_content = "\n".join(code_files_content)
-                        analysis_context += f"Trechos de Código (total {code_file_count} arquivos, {current_code_size / 1024:.2f} KB):\n```\n{st.session_state.code_snippet_content}\n```\n\n"
+                        st.session_state.code_snippet_content = "\n\n".join(code_files_content)
+                        analysis_context += f"Trechos de Código (total {code_file_count} arquivos, {current_code_size / 1024:.2f} KB):```{st.session_state.code_snippet_content}```"
                         logging.info(f"Mobile Static Analyzer: {code_file_count} arquivos de código processados.")
                     else:
-                        st.info("Nenhum arquivo de código relevante ou dentro do limite de tamanho encontrado no ZIP.")
+                        st.info("Nenhum arquivo de código relevante encontrado no ZIP.")
                         logging.info("Mobile Static Analyzer: Nenhum arquivo de código encontrado no ZIP.")
 
-                    analyzed_content = analysis_context.replace('{', '{{').replace('}', '}}') # O conteúdo para o LLM é o contexto gerado aqui
-                    st.success("Conteúdo do ZIP descompactado e preparado para análise.")
-
-                except zipfile.BadZipFile:
-                    st.error("Arquivo ZIP inválido. Por favor, faça upload de um arquivo ZIP válido.")
-                    logging.error("Mobile Static Analyzer: Upload de ZIP inválido.")
-                    st.session_state.uploaded_decompiled_zip = None
                 except Exception as e:
                     st.error(f"Erro ao processar o arquivo ZIP: {e}")
-                    logging.exception(f"Mobile Static Analyzer: Erro geral ao processar ZIP: {e}.")
+                    logging.exception(f"Mobile Static Analyzer: Erro ao processar ZIP: {e}.")
                     st.session_state.uploaded_decompiled_zip = None
 
+            analyzed_content = analysis_context.replace('{', '{{').replace('}', '}}')
 
     elif st.session_state.mobile_analysis_type == "Colar AndroidManifest.xml":
         st.session_state.manifest_content = st.text_area(
             "Cole o conteúdo do AndroidManifest.xml aqui:",
             value=st.session_state.manifest_content,
-            placeholder="<manifest ...>\n    <uses-permission android:name=\"android.permission.INTERNET\"/>\n    ...\n</manifest>",
+            placeholder="<manifest ...><uses-permission android:name=\"android.permission.INTERNET\"/>...</manifest>",
             height=400,
             key="manifest_input_area"
         )
-        escaped_manifest_content = st.session_state.manifest_content.replace('{', '{{').replace('}', '}}')
-        analyzed_content = f"Conteúdo do AndroidManifest.xml:\n```xml\n{escaped_manifest_content}\n```\n"
+        escaped_manifest = st.session_state.manifest_content.replace('{', '{{').replace('}', '}}')
+        analyzed_content = f"Conteúdo do AndroidManifest.xml:```xml{escaped_manifest}```"
+        logging.info("Mobile Static Analyzer: Conteúdo do AndroidManifest.xml lido.")
 
     elif st.session_state.mobile_analysis_type == "Colar Trecho de Código (Java/Smali/Kotlin)":
         st.session_state.code_snippet_content = st.text_area(
             "Cole trechos de código Java/Smali/Kotlin aqui (mantenha relevante e conciso):",
             value=st.session_state.code_snippet_content,
-            placeholder="Ex: public class SecretHolder {\n    private static final String API_KEY = \"sk-123xyz\";\n}",
+            placeholder="Ex: public class SecretHolder {\nprivate static final String API_KEY = \"sk-123xyz\";\n}",
             height=400,
             key="code_snippet_input_area"
         )
-        escaped_code_snippet_content = st.session_state.code_snippet_content.replace('{', '{{').replace('}', '}}')
-        analyzed_content = f"Trecho de Código para Análise:\n```java\n{escaped_code_snippet_content}\n```\n" # Ou 'smali', 'kotlin' # Ou 'smali', 'kotlin'
-
+        escaped_code = st.session_state.code_snippet_content.replace('{', '{{').replace('}', '}}')
+        analyzed_content = f"Trecho de Código para Análise:```java{escaped_code}```"
+        logging.info("Mobile Static Analyzer: Trecho de código colado pelo usuário.")
 
     if st.button("Analisar Aplicativo Mobile", key="analyze_mobile_app_button"):
         if not analyzed_content.strip():
-            st.error("Por favor, forneça o conteúdo para análise (faça upload do ZIP, cole o Manifest ou o código).")
+            st.error("Por favor, forneça o conteúdo para análise.")
             logging.warning("Mobile Static Analyzer: Análise abortada, conteúdo vazio.")
             return
 
         with st.spinner("Analisando aplicativo mobile estaticamente com LLM..."):
             logging.info("Mobile Static Analyzer: Iniciando análise estática.")
 
-            # --- INJETANDO O CONTEXTO GLOBAL ---
             global_context_prompt = get_global_context_prompt()
-            # --- FIM INJEÇÃO DE CONTEXTO ---
 
             mobile_analysis_prompt = (
-                f"**RESUMO:** Forneça um resumo quantitativo na PRIMEIRA LINHA da sua resposta, no formato exato: `Total de Achados: X | Críticos: Y | Altos: Z | Médios: W | Baixos: V` (substitua X,Y,Z,W,V pelos números correspondentes). Se não houver achados, use 0." # NOVO: Pedido de resumo na primeira linha
-                "\n\nVocê é um especialista em segurança de aplicativos mobile e pentest, com profundo conhecimento na **OWASP Mobile Top 10 (2024)** e em análise estática de código mobile."
-                + global_context_prompt +
-                f"\n\nSua tarefa é analisar o conteúdo descompilado de um aplicativo Android (APK) fornecido a seguir. Identifique **TODAS as potenciais vulnerabilidades de segurança** com base nas categorias da OWASP Mobile Top 10, bem como outras falhas comuns em aplicativos mobile."
-                f"\n\n**Conteúdo para Análise:**\n" + analyzed_content + # O conteúdo já formatado com code blocks
-
-                f"\n\nPara cada **achado de segurança** identificado, apresente de forma concisa, técnica e prática, utilizando formato Markdown para títulos e blocos de código:"
-                f"\n\n## [Nome do Achado] (Ex: Chave de API Hardcoded, Comunicação Não Criptografada)"
-                f"\n**Categoria OWASP Mobile (2024):** [M#: Nome da Categoria - Ex: M1: Improper Credential Usage]"
-                f"\n**Severidade:** [Crítica/Alta/Média/Baixa/Informativa - justifique o impacto para o app mobile]"
-                f"\n**Localização e Detalhes:** Explique onde no código/manifesto a falha foi observada. **Inclua o trecho de código relevante em um bloco de código Markdown (` ```java `, ` ```xml `, ` ```smali `) e indique o nome do arquivo (se aplicável, para o ZIP descompilado) onde foi encontrado.** Ex: `Arquivo: AndroidManifest.xml (linha X), Trecho: <application android:debuggable=\"true\">`"
-                f"\n**Exemplo de Cenário de Exploração/Impacto:** Descreva como esta falha pode ser explorada por um atacante em um contexto mobile e qual o impacto potencial."
-                f"\n**Recomendação de Mitigação:** Ações concretas e específicas para corrigir o problema, relevantes para o desenvolvimento mobile. Inclua exemplos de código ou configurações se aplicável."
-                f"\n\nSe não encontrar vulnerabilidades óbvias, indique isso claramente."
-                f"\nSua análise deve ser direta, útil e focada em achados acionáveis para um desenvolvedor ou pentester mobile."
+                f"Você é um especialista em segurança de aplicativos móveis e pentest, com profundo conhecimento na **OWASP Mobile Top 10 (2024)**.\n"
+                f"{global_context_prompt}\n\n"
+                f"Sua tarefa é analisar o conteúdo descompilado de um aplicativo Android (APK) fornecido a seguir. Identifique **TODAS as potenciais vulnerabilidades de segurança** com base nas categorias da OWASP Mobile Top 10, bem como outras falhas comuns em aplicativos mobile.\n\n"
+                f"**RESUMO:** Forneça um resumo quantitativo na PRIMEIRA LINHA da sua resposta, no formato exato: `Total de Achados: X | Críticos: Y | Altos: Z | Médios: W | Baixos: V` (substitua X,Y,Z,W,V pelos números correspondentes). Se não houver achados, use 0.\n\n"
+                f"Para cada **achado de segurança** identificado, apresente de forma concisa e prática, utilizando Markdown para formatação:\n\n"
+                f"### [Nome da Vulnerabilidade] (Ex: Chave de API Hardcoded, Comunicação Não Criptografada)\n"
+                f"**Categoria OWASP Mobile (2024):** [Ex: M1: Improper Platform Usage]\n"
+                f"**Severidade/Risco:** [Alta/Média/Baixa - explique o impacto específico para esta vulnerabilidade]\n"
+                f"**Localização na Especificação:** Indique onde foi encontrada a vulnerabilidade (ex: `AndroidManifest.xml`, `MainActivity.java`).\n"
+                f"**Detalhes:** Explique o problema técnico e como ele ocorre.\n\n"
+                f"**Conteúdo para Análise:**\n{analyzed_content}\n\n"
+                f"Se não encontrar vulnerabilidades óbvias, indique isso claramente."
             )
 
             analysis_result_raw = obter_resposta_llm(llm_model_text, [mobile_analysis_prompt])
-
             if analysis_result_raw:
-                st.session_state.mobile_analysis_summary, st.session_state.mobile_analysis_result = parse_vulnerability_summary(analysis_result_raw)
+                st.session_state.mobile_analysis_result = analysis_result_raw
+                st.session_state.mobile_analysis_summary = parse_vulnerability_summary(analysis_result_raw)
                 logging.info("Mobile Static Analyzer: Análise concluída com sucesso.")
             else:
                 st.session_state.mobile_analysis_result = "Não foi possível realizar a análise estática mobile. Tente refinar o conteúdo ou ajustar o APK descompilado."
                 st.session_state.mobile_analysis_summary = None
                 logging.error("Mobile Static Analyzer: Falha na análise pelo LLM.")
 
+    # Exibir resultados
     if st.session_state.mobile_analysis_result:
-        st.subheader("Resultados da Análise Estática Mobile:")
+        st.subheader("Resultados da Análise Estática Mobile")
+
         if st.session_state.mobile_analysis_summary:
             cols = st.columns(5)
-            cols[0].metric("Total Achados", st.session_state.mobile_analysis_summary.get("Total", 0))
-            cols[1].metric("Críticos", st.session_state.mobile_analysis_summary.get("Críticas", 0))
-            cols[2].metric("Altos", st.session_state.mobile_analysis_summary.get("Altas", 0))
+            cols[0].metric("Total", st.session_state.mobile_analysis_summary.get("Total", 0))
+            cols[1].metric("Críticos", st.session_state.mobile_analysis_summary.get("Críticos", 0))
+            cols[2].metric("Altos", st.session_state.mobile_analysis_summary.get("Altos", 0))
             cols[3].metric("Médios", st.session_state.mobile_analysis_summary.get("Médios", 0))
-            cols[4].metric("Baixos", st.session_state.mobile_analysis_summary.get("Baixas", 0))
-            st.markdown("---")
-        st.markdown(st.session_state.mobile_analysis_result)
+            cols[4].metric("Baixos", st.session_state.mobile_analysis_summary.get("Baixos", 0))
+
+        vulnerability_details = parse_vulnerability_details(st.session_state.mobile_analysis_result)
+
+        if vulnerability_details:
+            for vuln in vulnerability_details:
+                st.markdown(f"### {vuln['name']}")
+                st.markdown(f"**Categoria OWASP Mobile (2024):** {vuln['category']}")
+                st.markdown(f"**Severidade/Risco:** {vuln['severity']}")
+                st.markdown(f"**Localização na Especificação:** {vuln['location']}")
+                st.markdown(f"**Detalhes:** {vuln['details']}")
+                st.markdown("---")
+        else:
+            st.info("Nenhuma vulnerabilidade detalhada encontrada na resposta do LLM.")
 
         # Feedback Buttons
         cols_feedback = st.columns(2)
